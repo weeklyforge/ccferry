@@ -9,8 +9,8 @@ Evidence log for the M1 plan. One section per spike; fill during Tasks 2-4.
 
 ## Spike B: SDK cross-store resume
 
-- Result: (pending)
-- Evidence: (paste session ids and reply)
+- Result: PASS
+- Evidence: `first reply: ACK | session: b564d9f2-7e6e-477e-b4ec-2f501948044f` / `resumed reply: 42` / `SPIKE-B: PASS` — a second `query()` in a separate process, resuming the first session id, recalled the fact stored by the first.
 
 ## Spike C: resume fork semantics
 
