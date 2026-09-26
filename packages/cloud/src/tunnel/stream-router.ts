@@ -83,6 +83,10 @@ export class StreamRouter {
     const stream = this.pending.get(frame.streamId);
     if (!stream) return;
     if (frame.type === FrameType.Data) {
+      // Activity resets the idle timeout: a resumed session's first byte can
+      // legitimately exceed 30s (long context replay) while it streams fine.
+      clearTimeout(stream.timer);
+      stream.timer = setTimeout(() => this.fail(frame.streamId), this.timeoutMs);
       if (!stream.headersSent) {
         stream.headersSent = true;
         const header = JSON.parse(frame.payload.toString('utf8')) as { status: number; headers: Record<string, string> };
