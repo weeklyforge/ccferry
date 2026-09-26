@@ -156,12 +156,39 @@ export class TunnelClient {
     }
     if (frame.type === FrameType.Open) {
       const { kind, meta } = decodeOpenMeta(frame.payload);
-      if (kind === OPEN_KIND.http) void this.bridgeHttp(frame.streamId, meta);
+      if (kind === OPEN_KIND.http) this.openHttpStream(frame.streamId, meta);
+      return;
+    }
+    if (frame.type === FrameType.Data) {
+      this.feedRequestBody(frame.streamId, frame.payload);
       return;
     }
   }
 
-  private async bridgeHttp(streamId: number, meta: Record<string, unknown>): Promise<void> {
+  private readonly requestBuffers = new Map<number, { meta: Record<string, unknown>; chunks: Buffer[]; received: number }>();
+
+  private openHttpStream(streamId: number, meta: Record<string, unknown>): void {
+    const bodyBytes = typeof meta['bodyBytes'] === 'number' ? meta['bodyBytes'] : 0;
+    if (bodyBytes <= 0) {
+      void this.bridgeHttp(streamId, meta, Buffer.alloc(0));
+      return;
+    }
+    this.requestBuffers.set(streamId, { meta, chunks: [], received: 0 });
+  }
+
+  private feedRequestBody(streamId: number, chunk: Buffer): void {
+    const entry = this.requestBuffers.get(streamId);
+    if (!entry) return; // not a stream awaiting its request body
+    entry.chunks.push(chunk);
+    entry.received += chunk.length;
+    const bodyBytes = typeof entry.meta['bodyBytes'] === 'number' ? entry.meta['bodyBytes'] : 0;
+    if (entry.received >= bodyBytes) {
+      this.requestBuffers.delete(streamId);
+      void this.bridgeHttp(streamId, entry.meta, Buffer.concat(entry.chunks));
+    }
+  }
+
+  private async bridgeHttp(streamId: number, meta: Record<string, unknown>, body: Buffer): Promise<void> {
     const controller = new AbortController();
     this.aborts.set(streamId, controller);
     const headers: Record<string, string> = {};
@@ -175,6 +202,7 @@ export class TunnelClient {
       const response = await fetch(`${base}${meta['path'] ?? '/'}`, {
         method: (meta['method'] ?? 'GET') as string,
         headers,
+        body: body.length > 0 ? new Uint8Array(body) : undefined,
         signal: controller.signal,
       });
       const headerPayload = JSON.stringify({

@@ -81,6 +81,24 @@ describe('TunnelClient (Review Focus 2, 3)', () => {
     await target.close();
   });
 
+  it('forwards POST bodies through the tunnel (user-reported defect)', async () => {
+    const target = Fastify();
+    target.post('/api/echo', async (req) => ({ got: req.body }));
+    await target.listen({ port: 0, host: '127.0.0.1' });
+    const targetPort = (target.server.address() as { port: number }).port;
+    client = makeClient({ targetBase: `http://127.0.0.1:${targetPort}` });
+    client.start();
+    await client.waitForConnected();
+    const res = await cloudApp.inject({
+      method: 'POST',
+      url: '/api/echo',
+      payload: { text: 'hello', force: false },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ got: { text: 'hello', force: false } });
+    await target.close();
+  });
+
   it('reports upstream errors as CLOSE(1) -> phone sees 502 (Review Focus 2)', async () => {
     client = makeClient({ targetBase: 'http://127.0.0.1:1' }); // nothing listens
     client.start();

@@ -43,7 +43,14 @@ export class StreamRouter {
     }
     const timer = setTimeout(() => this.fail(streamId), this.timeoutMs);
     this.pending.set(streamId, { req, reply, headersSent: false, timer });
-    const open = encodeOpen(streamId, OPEN_KIND.http, { method: req.method, path: req.url, headers });
+    // bodyBytes tells the PC when the request body is complete so it can
+    // issue the upstream fetch (no separate end-of-request frame in v0).
+    const open = encodeOpen(streamId, OPEN_KIND.http, {
+      method: req.method,
+      path: req.url,
+      headers,
+      bodyBytes: body.length,
+    });
     tunnel.send(open.readUInt8(0), open.readUInt32BE(1), open.subarray(7));
     if (body.length > 0) {
       for (let offset = 0; offset < body.length; offset += 65_535) {
