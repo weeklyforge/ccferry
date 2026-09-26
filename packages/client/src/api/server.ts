@@ -1,17 +1,25 @@
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
-import type { ServerResponse } from 'node:http';
 import type { SessionDriver } from '../driver/driver';
+import type { ApprovalBroker } from '../approval/broker';
+import { registerApprovalRoutes } from './approval-routes';
+import { startSse } from './sse';
 
 const ACTIVE_WINDOW_MS = 120_000;
 
 // The daemon binds to 127.0.0.1; also demand a loopback Host header so a
 // visited website cannot reach it through DNS rebinding (which would make
 // the request same-origin and skip the browser's CSRF preflight).
+// With a token configured (Task 9) the token becomes the gate instead.
 const ALLOWED_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '::1']);
 
-export function buildServer(driver: SessionDriver, logger = false): FastifyInstance {
-  const app = Fastify({ logger });
+export interface ServerOptions {
+  logger?: boolean;
+  broker?: ApprovalBroker;
+}
+
+export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): FastifyInstance {
+  const app = Fastify({ logger: opts.logger ?? false });
 
   app.addHook('onRequest', async (req, reply) => {
     const hostname = req.hostname.replace(/^\[|\]$/g, '');
@@ -70,21 +78,15 @@ export function buildServer(driver: SessionDriver, logger = false): FastifyInsta
       }
     } catch (error) {
       req.log.error({ err: error, sessionId: id }, 'send message failed');
-      reply.raw.write(`: ccferry error: ${errorMessage(error)}\n\n`);
+      reply.raw.write(`data: ${JSON.stringify({ type: 'error', message: errorMessage(error) })}\n\n`);
     } finally {
       reply.raw.end();
     }
   });
 
-  return app;
-}
+  if (opts.broker) registerApprovalRoutes(app, opts.broker);
 
-function startSse(raw: ServerResponse): void {
-  raw.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    Connection: 'keep-alive',
-  });
+  return app;
 }
 
 function errorMessage(error: unknown): string {

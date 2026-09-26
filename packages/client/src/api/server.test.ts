@@ -71,7 +71,7 @@ describe('api server', () => {
     expect(res.body).toContain(': ccferry error: stream boom');
   });
 
-  it('POST messages surfaces a mid-stream driver error as an SSE comment', async () => {
+  it('POST messages surfaces a mid-stream driver error as an error event', async () => {
     const app = buildServer(new ThrowingSendDriver([], [session()]));
     const res = await app.inject({
       method: 'POST',
@@ -80,7 +80,7 @@ describe('api server', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
-    expect(res.body).toContain(': ccferry error: send boom');
+    expect(res.body).toContain('data: {"type":"error","message":"send boom"}');
   });
 
   it('POST messages returns 409 session_active for a recently modified session (Review Focus 3)', async () => {
