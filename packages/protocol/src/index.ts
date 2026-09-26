@@ -65,4 +65,5 @@ export type StreamMessage =
 export type CloudEvent =
   | { kind: 'approval'; request: ToolApprovalRequest }
   | { kind: 'settled'; approvalId: string; decision: string }
-  | { kind: 'tunnel'; state: 'connected' | 'disconnected' };
+  | { kind: 'tunnel'; state: 'connected' | 'disconnected' }
+  | { kind: 'result'; sessionId: string; ok: boolean; excerpt: string; at: number };
