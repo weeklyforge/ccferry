@@ -18,6 +18,15 @@ class ThrowingSendDriver extends FakeDriver {
   }
 }
 
+class OptsCapturingDriver extends FakeDriver {
+  lastOpts: { fromStart: boolean; fromByte?: number } | undefined;
+
+  async *streamSession(_id: string, opts: { fromStart: boolean; fromByte?: number }): AsyncGenerator<ParsedLine> {
+    this.lastOpts = opts;
+    yield { ok: true, line: 1, json: { type: 'user' } };
+  }
+}
+
 function session(overrides: Partial<SessionSummary> = {}): SessionSummary {
   return {
     sessionId: '11111111-aaaa-4bbb-8ccc-000000000001',
@@ -60,6 +69,27 @@ describe('api server', () => {
     const res = await app.inject({ method: 'GET', url: '/api/sessions/does-not-exist/stream' });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toEqual({ error: 'session not found' });
+  });
+
+  it('GET /api/sessions/:id/stream maps tailBytes to a fromByte offset', async () => {
+    const driver = new OptsCapturingDriver([], [session({ sizeBytes: 10_000 })]);
+    const app = buildServer(driver);
+    await app.inject({ method: 'GET', url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/stream?fromStart=true&tailBytes=1024' });
+    expect(driver.lastOpts?.fromByte).toBe(10_000 - 1024);
+  });
+
+  it('clamps the tail offset to 0 when the file is smaller than tailBytes', async () => {
+    const driver = new OptsCapturingDriver([], [session({ sizeBytes: 100 })]);
+    const app = buildServer(driver);
+    await app.inject({ method: 'GET', url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/stream?fromStart=true&tailBytes=4096' });
+    expect(driver.lastOpts?.fromByte).toBe(0);
+  });
+
+  it('omits fromByte when tailBytes is absent', async () => {
+    const driver = new OptsCapturingDriver([], [session({ sizeBytes: 10_000 })]);
+    const app = buildServer(driver);
+    await app.inject({ method: 'GET', url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/stream?fromStart=true' });
+    expect(driver.lastOpts?.fromByte).toBeUndefined();
   });
 
   it('GET /api/sessions/:id/stream surfaces a mid-stream driver error as an SSE comment', async () => {

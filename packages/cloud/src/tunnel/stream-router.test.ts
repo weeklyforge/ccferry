@@ -129,6 +129,44 @@ describe('StreamRouter (Review Focus 2, 3)', () => {
     expect(res.statusCode).toBe(502);
   });
 
+  it('keeps a slow but active stream alive past the idle timeout', async () => {
+    // A resumed session's first byte can exceed the timeout while streaming
+    // fine — DATA activity must reset the idle timer (fix-forward #2).
+    const instance = Fastify();
+    await instance.register(websocket);
+    const t2 = new TunnelServer({ tunnelToken: 't' });
+    const r2 = new StreamRouter({ tunnel: t2, requestTimeoutMs: 300 });
+    t2.attach(instance);
+    r2.register(instance);
+    await instance.listen({ port: 0, host: '127.0.0.1' });
+    const p2 = (instance.server.address() as { port: number }).port;
+    const pc2 = new WebSocket(`ws://127.0.0.1:${p2}/tunnel`);
+    await new Promise((resolve) => pc2.on('open', resolve));
+    pc2.send(encodeFrame(FrameType.Auth, 0, Buffer.from('t')));
+    await new Promise<void>((resolve) => pc2.once('message', () => resolve()));
+    pc2.on('message', (data) => {
+      for (const frame of decodeFrames(Buffer.from(data as Buffer)).frames) {
+        if (frame.type !== FrameType.Open) continue;
+        pc2.send(encodeFrame(FrameType.Data, frame.streamId, Buffer.from(JSON.stringify({ status: 200, headers: { 'content-type': 'text/event-stream' } }))));
+        let ticks = 0;
+        const iv = setInterval(() => {
+          ticks += 1;
+          if (ticks >= 6) {
+            clearInterval(iv);
+            pc2.send(encodeFrame(FrameType.Close, frame.streamId, Buffer.from([0, 0])));
+            return;
+          }
+          pc2.send(encodeFrame(FrameType.Data, frame.streamId, Buffer.from('data: tick\n\n')));
+        }, 100); // 600ms total — double the 300ms timeout
+      }
+    });
+    const res = await instance.inject({ method: 'GET', url: '/api/slow' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('tick');
+    pc2.close();
+    await instance.close();
+  });
+
   it('fails in-flight requests immediately when the tunnel drops', async () => {
     let sawOpen: () => void = () => undefined;
     const opened = new Promise<void>((resolve) => (sawOpen = resolve));

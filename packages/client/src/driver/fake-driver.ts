@@ -13,7 +13,10 @@ export class FakeDriver implements SessionDriver {
     return { projects: this.projects, sessions: this.sessions };
   }
 
-  async *streamSession(): AsyncGenerator<ParsedLine> {
+  async *streamSession(
+    _sessionId: string,
+    _opts: { fromStart: boolean; fromByte?: number; signal: AbortSignal },
+  ): AsyncGenerator<ParsedLine> {
     for (const line of this.lines) yield line;
   }
 
