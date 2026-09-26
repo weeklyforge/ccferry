@@ -169,6 +169,13 @@ export class TunnelClient {
       this.feedRequestBody(frame.streamId, frame.payload);
       return;
     }
+    if (frame.type === FrameType.Close) {
+      // The phone hung up: abort the in-flight upstream fetch (and drop any
+      // half-buffered request body) instead of running it out unwatched.
+      this.aborts.get(frame.streamId)?.abort();
+      this.requestBuffers.delete(frame.streamId);
+      return;
+    }
   }
 
   private readonly requestBuffers = new Map<number, { meta: Record<string, unknown>; chunks: Buffer[]; received: number }>();

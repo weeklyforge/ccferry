@@ -26,6 +26,9 @@ beforeEach(async () => {
 afterEach(async () => {
   client?.stop();
   await new Promise((resolve) => setTimeout(resolve, 50));
+  // An aborted mid-body fetch leaves its connection lingering in the server
+  // (response never ended); drop it so close() does not wait forever.
+  cloudApp.server.closeAllConnections();
   await cloudApp.close();
 });
 
@@ -105,6 +108,43 @@ describe('TunnelClient (Review Focus 2, 3)', () => {
     await client.waitForConnected();
     const res = await cloudApp.inject({ method: 'GET', url: '/api/whatever' });
     expect(res.statusCode).toBe(502);
+  });
+
+  it('aborts the upstream fetch when the phone disconnects mid-stream', async () => {
+    let upstreamClosed = false;
+    const target = Fastify();
+    target.get('/api/slow', async (req, reply) => {
+      reply.raw.writeHead(200, { 'content-type': 'text/event-stream' });
+      reply.raw.write('data: tick\n\n');
+      req.raw.on('close', () => {
+        upstreamClosed = true;
+      });
+      await new Promise<void>(() => undefined); // hold like a real SSE route
+    });
+    await target.listen({ port: 0, host: '127.0.0.1' });
+    const targetPort = (target.server.address() as { port: number }).port;
+    client = makeClient({ targetBase: `http://127.0.0.1:${targetPort}` });
+    client.start();
+    await client.waitForConnected();
+    const controller = new AbortController();
+    const response = await fetch(`http://127.0.0.1:${cloudPort}/api/slow`, { signal: controller.signal });
+    await response.body!.getReader().read();
+    controller.abort(); // phone gone -> cloud CLOSE -> PC must abort the fetch
+    await new Promise<void>((resolve, reject) => {
+      const started = Date.now();
+      const iv = setInterval(() => {
+        if (upstreamClosed) {
+          clearInterval(iv);
+          resolve();
+        } else if (Date.now() - started > 1500) {
+          clearInterval(iv);
+          reject(new Error('upstream fetch was not aborted'));
+        }
+      }, 50);
+    });
+    expect(upstreamClosed).toBe(true);
+    target.server.closeAllConnections(); // aborted stream leaves a lingering socket
+    await target.close();
   });
 });
 

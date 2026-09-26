@@ -44,6 +44,15 @@ export class StreamRouter {
     }
     const timer = setTimeout(() => this.fail(streamId), this.timeoutMs);
     this.pending.set(streamId, { req, reply, headersSent: false, timer });
+    // The phone walked away mid-stream (response never finished): tell the
+    // PC so it aborts the upstream fetch instead of running it to completion.
+    reply.raw.on('close', () => {
+      if (this.pending.has(streamId) && !reply.raw.writableEnded) {
+        clearTimeout(timer);
+        this.pending.delete(streamId);
+        tunnel.send(FrameType.Close, streamId, Buffer.from([0, 0]));
+      }
+    });
     // bodyBytes tells the PC when the request body is complete so it can
     // issue the upstream fetch (no separate end-of-request frame in v0).
     const open = encodeOpen(streamId, OPEN_KIND.http, {

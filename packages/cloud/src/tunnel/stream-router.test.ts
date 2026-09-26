@@ -42,6 +42,9 @@ beforeEach(async () => {
 
 afterEach(async () => {
   pc.close();
+  // An aborted mid-body fetch leaves its connection lingering in the server
+  // (response never ended); drop it so close() does not wait forever.
+  app.server.closeAllConnections();
   await app.close();
 });
 
@@ -158,5 +161,27 @@ describe('StreamRouter (Review Focus 2, 3)', () => {
     await settled;
     expect(Date.now() - started).toBeLessThan(1500); // not the 2000ms idle timeout
     controller.abort();
+  });
+
+  it('sends CLOSE for the stream when the phone disconnects mid-stream', async () => {
+    let openStreamId = 0;
+    servePcResponse(({ streamId }, reply) => {
+      openStreamId = streamId;
+      reply(encodeFrame(FrameType.Data, streamId, Buffer.from(JSON.stringify({ status: 200, headers: { 'content-type': 'text/event-stream' } }))));
+      reply(encodeFrame(FrameType.Data, streamId, Buffer.from('data: one\n\n')));
+      // stream intentionally left open
+    });
+    const controller = new AbortController();
+    const response = await fetch(`http://127.0.0.1:${port}/api/sse`, { signal: controller.signal });
+    await response.body!.getReader().read();
+    const closedAtPc = new Promise<number>((resolve) => {
+      pc.on('message', (data) => {
+        for (const frame of decodeFrames(Buffer.from(data as Buffer)).frames) {
+          if (frame.type === FrameType.Close) resolve(frame.streamId);
+        }
+      });
+    });
+    controller.abort(); // the phone walks away
+    expect(await closedAtPc).toBe(openStreamId);
   });
 });
