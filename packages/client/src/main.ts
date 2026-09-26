@@ -9,6 +9,7 @@ import { loadConfig } from './config';
 import { cachedScan } from './session/scan-cache';
 import { computeBindHost } from './api/bind';
 import { buildServer } from './api/server';
+import { TunnelClient } from './tunnel/client';
 
 const config = loadConfig();
 const port = Number(process.env['CCFERRY_PORT'] ?? 8787);
@@ -38,6 +39,21 @@ if (existsSync(pwaDir)) {
   });
 } else {
   console.warn(`ccferry: PWA directory not found at ${pwaDir} — serving API only`);
+}
+
+const tunnelUrl = process.env['CCFERRY_TUNNEL_URL'];
+const tunnelToken = process.env['CCFERRY_TUNNEL_TOKEN'];
+if (tunnelUrl && tunnelToken) {
+  const tunnel = new TunnelClient({
+    url: tunnelUrl,
+    token: tunnelToken,
+    bearer: token, // forwards the LAN token when the daemon requires one
+    broker,
+    log: (message) => console.log(`ccferry-tunnel: ${message}`),
+  });
+  tunnel.start();
+} else if (tunnelUrl || tunnelToken) {
+  console.warn('ccferry: CCFERRY_TUNNEL_URL and CCFERRY_TUNNEL_TOKEN must be set together — tunnel disabled');
 }
 
 app

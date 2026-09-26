@@ -1,0 +1,8 @@
+39.105.92.24.nip.io {
+  reverse_proxy 127.0.0.1:8788
+}
+
+# If ICP interception blocks 443, use instead:
+# https://:8443 {
+#   reverse_proxy 127.0.0.1:8788
+# }
