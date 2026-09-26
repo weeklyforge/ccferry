@@ -1,14 +1,13 @@
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { DEFAULT_TOOL_WHITELIST } from './approval/policy';
 
 export interface DaemonConfig {
   vaultPath?: string;
   toolWhitelist: string[];
   approvalTimeoutMs: number;
 }
-
-const DEFAULT_TOOL_WHITELIST = ['Read', 'Glob', 'Grep', 'LS', 'TodoWrite'];
 
 export function loadConfig(filePath?: string): DaemonConfig {
   const file = filePath ?? path.join(os.homedir(), '.ccferry', 'config.json');
