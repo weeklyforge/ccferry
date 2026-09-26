@@ -45,6 +45,8 @@ export class TunnelClient {
   stop(): void {
     this.stopped = true;
     if (this.socket) this.eventSendBestEffort({ kind: 'tunnel', state: 'disconnected' });
+    this.unsubscribeBroker?.();
+    this.unsubscribeBroker = null;
     this.socket?.close();
     this.socket = null;
     for (const controller of this.aborts.values()) controller.abort();
@@ -121,12 +123,34 @@ export class TunnelClient {
     }
   }
 
+  private unsubscribeBroker: (() => void) | null = null;
+
+  private startEventBridge(): void {
+    this.unsubscribeBroker?.(); // reconnect path: drop the previous subscription
+    const broker = this.opts.broker;
+    // Snapshot first: a reattached phone must see pending approvals again.
+    if (broker) {
+      for (const request of broker.listPending()) {
+        this.eventSend({ kind: 'approval', request });
+      }
+      this.unsubscribeBroker = broker.subscribe((frame) => {
+        if ('toolName' in frame) {
+          this.eventSend({ kind: 'approval', request: frame });
+        } else {
+          this.eventSend({ kind: 'settled', approvalId: frame.approvalId, decision: frame.decision });
+        }
+      });
+    }
+    this.eventSend({ kind: 'tunnel', state: 'connected' });
+  }
+
   private onFrame(frame: Frame): void {
     if (frame.type === FrameType.AuthOk) {
       this.attempt = 0;
       this.socket = this.activeSocket;
       const open = encodeOpen(EVENT_STREAM_ID, OPEN_KIND.event, {});
       this.send(FrameType.Open, EVENT_STREAM_ID, open.subarray(7));
+      this.startEventBridge();
       this.log('tunnel authenticated');
       return;
     }

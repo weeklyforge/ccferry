@@ -59,3 +59,10 @@ export type StreamMessage =
   | { type: 'snapshot'; sessions: SessionSummary[] }
   | { type: 'append'; sessionId: string; lines: ParsedLine[] };
 
+
+// Events flowing PC -> cloud over the event stream (spec section 1, D2'):
+// the pipeline Web Push will later consume.
+export type CloudEvent =
+  | { kind: 'approval'; request: ToolApprovalRequest }
+  | { kind: 'settled'; approvalId: string; decision: string }
+  | { kind: 'tunnel'; state: 'connected' | 'disconnected' };
