@@ -152,6 +152,34 @@ describe('api server', () => {
     expect(unknown.statusCode).toBe(404);
   });
 
+  it('rejects /api without a token when one is configured', async () => {
+    const app = buildServer(new FakeDriver([{ projectPath: 'D:\\work\\proj A', sessionCount: 1 }]), { token: 's3cret' });
+    const denied = await app.inject({ method: 'GET', url: '/api/projects' });
+    expect(denied.statusCode).toBe(401);
+    const allowed = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { authorization: 'Bearer s3cret' },
+    });
+    expect(allowed.statusCode).toBe(200);
+  });
+
+  it('accepts ?token= for SSE-style requests', async () => {
+    const app = buildServer(new FakeDriver([{ projectPath: 'D:\\work\\proj A', sessionCount: 1 }]), { token: 's3cret' });
+    const res = await app.inject({ method: 'GET', url: '/api/projects?token=s3cret' });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('relaxes the Host allowlist when a token is configured', async () => {
+    const app = buildServer(new FakeDriver([{ projectPath: 'D:\\work\\proj A', sessionCount: 1 }]), { token: 's3cret' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { authorization: 'Bearer s3cret', host: '192.168.1.5:8787' },
+    });
+    expect(res.statusCode).toBe(200);
+  });
+
   it('rejects requests whose Host header is not a loopback name (DNS rebinding guard)', async () => {
     const app = buildServer(new FakeDriver([{ projectPath: 'D:\\work\\proj A', sessionCount: 1 }]));
     const evil = await app.inject({

@@ -19,12 +19,23 @@ export interface ServerOptions {
   logger?: boolean;
   broker?: ApprovalBroker;
   vaultRoot?: string | null;
+  token?: string;
 }
 
 export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: opts.logger ?? false });
 
   app.addHook('onRequest', async (req, reply) => {
+    if (opts.token) {
+      // Token mode (LAN): the token is the gate; Bearer header or ?token= (SSE).
+      if (!req.url.startsWith('/api')) return; // static PWA shell stays open
+      const header = req.headers['authorization'];
+      const query = req.query as Record<string, unknown>;
+      const provided = header === `Bearer ${opts.token}` || query['token'] === opts.token;
+      if (!provided) return reply.code(401).send({ error: 'unauthorized' });
+      return;
+    }
+    // Tokenless mode (localhost): keep the M1 DNS-rebinding Host allowlist.
     const hostname = req.hostname.replace(/^\[|\]$/g, '');
     if (!ALLOWED_HOSTNAMES.has(hostname)) {
       return reply.code(403).send({ error: 'host not allowed' });
