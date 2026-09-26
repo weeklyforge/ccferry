@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Button, Cell, Collapse, CollapseItem, PullRefresh, Tag, showConfirmDialog, showDialog } from 'vant';
+import { Button, Cell, Collapse, CollapseItem, PullRefresh, Tag, showConfirmDialog, showDialog, showFailToast } from 'vant';
 import type { SessionSummary, ToolApprovalRequest } from '@ccferry/protocol';
 import { apiFetch, readSsePost } from '../lib/api';
 import { useApprovalsStore } from '../stores/approvals';
@@ -52,7 +52,9 @@ async function startVaultSession(): Promise<void> {
   try {
     await readSsePost('/api/messages', { projectPath: vaultRoot, text: agentText.value || '请整理一下最近的笔记' }, () => undefined);
   } catch {
-    // errors surface in the session stream itself; ignore here
+    showFailToast('指令发送失败，请检查网络后重试');
+    await refresh();
+    return;
   }
   void showDialog({ message: '已创建 vault 会话，请在会话列表打开' });
   await refresh();

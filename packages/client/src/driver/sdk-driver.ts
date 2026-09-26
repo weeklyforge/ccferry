@@ -4,8 +4,8 @@ import { parseLine } from '../session/parse';
 import { scanStore } from '../session/scanner';
 import type { ScanFn } from '../session/scan-cache';
 import { tailLines } from '../session/tailer';
-import type { ApprovalBroker, PermissionResult } from '../approval/broker';
-import { DEFAULT_TOOL_WHITELIST, evaluateToolPolicy } from '../approval/policy';
+import type { ApprovalBroker } from '../approval/broker';
+import { DEFAULT_TOOL_WHITELIST, createCanUseTool } from '../approval/policy';
 import type { SessionDriver, SendMessageInput } from './driver';
 
 export interface SdkDriverOptions {
@@ -51,31 +51,16 @@ export class SdkDriver implements SessionDriver {
   private readonly scan: ScanFn;
   private currentSessionId: string | null = null;
 
+  private readonly canUseTool: ReturnType<typeof createCanUseTool>;
+
   constructor(
     private readonly claudeDir: string,
     private readonly options: SdkDriverOptions = {},
   ) {
     this.whitelist = options.whitelist ?? DEFAULT_TOOL_WHITELIST;
     this.scan = options.scan ?? scanStore;
+    this.canUseTool = createCanUseTool(this.whitelist, this.options.broker, () => this.currentSessionId);
   }
-
-  private readonly canUseTool = async (
-    toolName: string,
-    input: Record<string, unknown>,
-  ): Promise<PermissionResult> => {
-    if (evaluateToolPolicy(toolName, this.whitelist) === 'allow') {
-      return { behavior: 'allow' };
-    }
-    if (!this.options.broker) {
-      // No broker configured (unit contexts): stay fail-closed like M1.
-      return { behavior: 'deny', message: 'Tool use requires remote approval; no approval broker is configured.' };
-    }
-    return this.options.broker.requestApproval({
-      sessionId: this.currentSessionId,
-      toolName,
-      input,
-    });
-  };
 
   async list(): Promise<{ projects: ProjectSummary[]; sessions: SessionSummary[] }> {
     return this.scan(this.claudeDir);

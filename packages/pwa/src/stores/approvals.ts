@@ -10,6 +10,9 @@ export const useApprovalsStore = defineStore('approvals', {
     ingest(request: ToolApprovalRequest) {
       if (!this.pending.some((p) => p.approvalId === request.approvalId)) this.pending.push(request);
     },
+    removeById(approvalId: string) {
+      this.pending = this.pending.filter((p) => p.approvalId !== approvalId);
+    },
     async decide(approvalId: string, decision: ApprovalDecision) {
       // Remove the card only after the POST succeeds: a dropped decision
       // would otherwise look granted while the tool times out into a deny.

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Button, Cell, CellGroup, Field, NavBar, Search, showFailToast } from 'vant';
 import type { VaultNode, VaultSearchMatch } from '@ccferry/protocol';
@@ -9,30 +9,33 @@ import { debounce } from '../lib/debounce';
 
 const router = useRouter();
 const stack = ref<VaultNode[][]>([]);
-const title = ref('知识库');
+const names = ref<string[]>([]);
 const query = ref('');
 const matches = ref<VaultSearchMatch[] | null>(null);
 const editing = ref<string | null>(null);
 const creating = ref(false);
 const newNotePath = ref('');
 
+const title = computed(() => names.value[names.value.length - 1] ?? '知识库');
+
 const current = () => stack.value[stack.value.length - 1] ?? [];
 
 async function openRoot(): Promise<void> {
   const res = await apiFetch('/api/vault/tree');
   if (res.status === 503) {
-    title.value = '知识库（未配置）';
+    names.value = ['知识库（未配置）'];
     stack.value = [];
     return;
   }
   const body = await res.json();
   stack.value = [body['tree'] as VaultNode[]];
+  names.value = [];
 }
 
 function enter(node: VaultNode): void {
   if (node.kind === 'dir') {
     stack.value.push(node.children ?? []);
-    title.value = node.name;
+    names.value.push(node.name);
     matches.value = null;
   } else {
     editing.value = node.path;
@@ -54,7 +57,7 @@ function back(): void {
   }
   if (stack.value.length > 1) {
     stack.value.pop();
-    title.value = stack.value.length > 1 ? '…' : '知识库';
+    names.value.pop();
   } else {
     router.back();
   }

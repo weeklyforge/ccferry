@@ -49,4 +49,12 @@ describe('approvals store', () => {
     store.sweepExpired();
     expect(store.pending.map((p) => p.approvalId)).toEqual(['fresh']);
   });
+
+  it('removeById drops a settled approval card', () => {
+    const store = useApprovalsStore();
+    store.ingest(request('a3'));
+    store.ingest(request('a4'));
+    store.removeById('a3');
+    expect(store.pending.map((p) => p.approvalId)).toEqual(['a4']);
+  });
 });

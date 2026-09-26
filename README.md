@@ -24,10 +24,24 @@ Claude Code 的每个会话都是本地 JSONL 文件（`~/.claude/projects/<项�
 
 | 里程碑 | 内容 | 状态 |
 |---|---|---|
-| M1 | PC 裸跑 daemon + localhost API | 计划就绪 → `docs/superpowers/plans/2026-09-26-m1-local-daemon.md` |
-| M2 | PWA + 权限路由 + 知识库管理 | 待 M1 证据 |
-| M3 | 私有隧道协议 + 云部署 | 待 M2 |
+| M1 | PC 裸跑 daemon + localhost API | ✅ 2026-09-26（计划 → `docs/superpowers/plans/2026-09-26-m1-local-daemon.md`） |
+| M2 | PWA + 权限路由 + 知识库管理（局域网） | ✅ 2026-09-26（计划 → `docs/superpowers/plans/2026-09-26-m2-lan-pwa-vault.md`） |
+| M3 | 私有隧道协议 + 云部署 + 推送 | 待启动 |
 | M4 | 历史页 + 打磨 | 待 M3 |
 
-- 设计 spec：`docs/superpowers/specs/2026-09-25-claude-code-remote.md`
-- 证据日志：`docs/notes/m1-findings.md`
+- 设计 spec：`docs/superpowers/specs/2026-09-25-claude-code-remote.md`（总）· `docs/superpowers/specs/2026-09-26-m2-lan-pwa-vault-design.md`（M2）
+- 证据日志：`docs/notes/m1-findings.md` · `docs/notes/m2-findings.md`
+
+## 运行（M2 起）
+
+```bash
+pnpm install
+pnpm --filter @ccferry/pwa build          # 产出 packages/pwa/dist，daemon 静态托管
+CCFERRY_TOKEN=<token> CCFERRY_HOST=0.0.0.0 pnpm --filter @ccferry/client start
+```
+
+- 手机同 Wi-Fi 访问 `http://<PC局域网IP>:8787/`，设置页输入令牌一次
+- **不设 `CCFERRY_TOKEN` 时强制只绑 127.0.0.1**（安全默认）；`CCFERRY_PORT`/`CCFERRY_PWA_DIR` 可覆盖端口与 PWA 目录
+- daemon 配置 `~/.ccferry/config.json`：`vaultPath`（知识库根，未配则 `/api/vault/*` 返回 503）、`toolWhitelist`（无人值守放行的只读工具，默认 `Read/Glob/Grep/LS/TodoWrite`）、`approvalTimeoutMs`（审批超时即拒，默认 60s）
+- 测试：`pnpm -r test`；类型检查：`pnpm -r typecheck`
+

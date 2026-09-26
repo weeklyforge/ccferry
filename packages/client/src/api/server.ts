@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import type { FastifyInstance } from 'fastify';
 import type { SessionDriver } from '../driver/driver';
@@ -31,7 +32,9 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
       if (!req.url.startsWith('/api')) return; // static PWA shell stays open
       const header = req.headers['authorization'];
       const query = req.query as Record<string, unknown>;
-      const provided = header === `Bearer ${opts.token}` || query['token'] === opts.token;
+      const bearer = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;
+      const provided =
+        tokenMatches(opts.token, bearer) || tokenMatches(opts.token, typeof query['token'] === 'string' ? query['token'] : undefined);
       if (!provided) return reply.code(401).send({ error: 'unauthorized' });
       return;
     }
@@ -107,4 +110,13 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+// Constant-time token comparison: hash both sides to a fixed length so
+// timingSafeEqual never leaks length or early-mismatch information.
+function tokenMatches(expected: string, provided: string | undefined): boolean {
+  if (!provided) return false;
+  const a = createHash('sha256').update(expected).digest();
+  const b = createHash('sha256').update(provided).digest();
+  return timingSafeEqual(a, b);
 }

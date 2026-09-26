@@ -2,7 +2,7 @@
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import { Button, Field, showConfirmDialog } from 'vant';
-import type { ParsedLine, ToolApprovalRequest } from '@ccferry/protocol';
+import type { ApprovalSettledFrame, ParsedLine, ToolApprovalRequest } from '@ccferry/protocol';
 import { ApiError, readSsePost, sseUrl } from '../lib/api';
 import { useApprovalsStore } from '../stores/approvals';
 import { parsedLineToBubble } from '../lib/bubbles';
@@ -28,7 +28,12 @@ function pushBubble(line: ParsedLine): void {
 
 function handleApprovalEvent(data: string): void {
   try {
-    approvals.ingest(JSON.parse(data) as ToolApprovalRequest);
+    const frame = JSON.parse(data) as ToolApprovalRequest | ApprovalSettledFrame;
+    if ('toolName' in frame) {
+      approvals.ingest(frame);
+    } else {
+      approvals.removeById(frame.approvalId); // decided elsewhere or timed out — drop the ghost card
+    }
   } catch {
     // malformed frame — ignore
   }

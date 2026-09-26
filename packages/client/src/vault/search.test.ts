@@ -41,4 +41,10 @@ describe('createJsSearchEngine', () => {
     expect(matches).toHaveLength(1);
     expect(matches[0]!.text.length).toBeLessThanOrEqual(200);
   });
+
+  it('matches uppercase .MD extensions too (minor 10)', async () => {
+    await fs.writeFile(path.join(root, 'upper.MD'), 'smart heating\n');
+    const matches = await createJsSearchEngine().search(root, 'smart heating');
+    expect(matches.map((m) => m.path)).toEqual(['upper.MD']);
+  });
 });

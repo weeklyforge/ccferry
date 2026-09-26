@@ -47,7 +47,7 @@ async function collectMdFiles(root: string): Promise<string[]> {
   const files: string[] = [];
   async function visit(nodes: VaultNode[]): Promise<void> {
     for (const node of nodes) {
-      if (node.kind === 'file' && node.name.endsWith('.md')) files.push(path.join(root, node.path));
+      if (node.kind === 'file' && node.name.toLowerCase().endsWith('.md')) files.push(path.join(root, node.path));
       if (node.children) await visit(node.children);
     }
   }

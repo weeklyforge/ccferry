@@ -83,7 +83,7 @@ describe('api server', () => {
     expect(res.body).toContain('data: {"type":"error","message":"send boom"}');
   });
 
-  it('POST messages returns 409 session_active for a recently modified session (Review Focus 3)', async () => {
+  it('POST messages returns 409 session_active for a recently modified session (red line guard)', async () => {
     const app = buildServer(new FakeDriver([], [session({ lastModifiedMs: NOW - 1000 })]));
     const res = await app.inject({
       method: 'POST',

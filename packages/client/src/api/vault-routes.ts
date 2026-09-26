@@ -33,7 +33,7 @@ export function registerVaultRoutes(app: FastifyInstance, vaultRoot: string | nu
     if (!body.path || typeof body.content !== 'string') {
       return reply.code(400).send({ error: 'path and content required' });
     }
-    if (!body.path.endsWith('.md')) return reply.code(400).send({ error: 'only .md notes' });
+    if (!body.path.toLowerCase().endsWith('.md')) return reply.code(400).send({ error: 'only .md notes' });
     const outcome = await writeNote(root, body.path, body.content);
     if (outcome === 'escape') return reply.code(400).send({ error: 'path_escape' });
     if (outcome === 'missing') return reply.code(404).send({ error: 'note not found' });
@@ -46,7 +46,7 @@ export function registerVaultRoutes(app: FastifyInstance, vaultRoot: string | nu
     if (!root) return;
     const body = (req.body ?? {}) as { path?: string; content?: string };
     if (!body.path) return reply.code(400).send({ error: 'path required' });
-    if (!body.path.endsWith('.md')) return reply.code(400).send({ error: 'only .md notes' });
+    if (!body.path.toLowerCase().endsWith('.md')) return reply.code(400).send({ error: 'only .md notes' });
     const outcome = await createNote(root, body.path, body.content ?? '');
     if (outcome === 'escape') return reply.code(400).send({ error: 'path_escape' });
     if (outcome === 'exists') return reply.code(409).send({ error: 'note exists' });

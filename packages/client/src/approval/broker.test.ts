@@ -41,11 +41,51 @@ describe('ApprovalBroker', () => {
   it('notifies subscribers and reports subscriber count', () => {
     const broker = new ApprovalBroker();
     const seen: string[] = [];
-    const unsubscribe = broker.subscribe((request) => seen.push(request.toolName));
+    const unsubscribe = broker.subscribe((frame) => {
+      if (!('type' in frame)) seen.push(frame.toolName);
+    });
     expect(broker.subscriberCount()).toBe(1);
     void broker.requestApproval({ sessionId: null, toolName: 'Bash', input: {} });
     expect(seen).toEqual(['Bash']);
     unsubscribe();
     expect(broker.subscriberCount()).toBe(0);
+  });
+
+  it('broadcasts a settled frame on decision', async () => {
+    const broker = new ApprovalBroker({ timeoutMs: 5000 });
+    const frames: unknown[] = [];
+    broker.subscribe((frame) => frames.push(frame));
+    const pending = broker.requestApproval({ sessionId: null, toolName: 'Bash', input: {} });
+    const [request] = broker.listPending();
+    await Promise.resolve();
+    broker.decide(request!.approvalId, 'allow');
+    await pending;
+    const settled = frames.find((f) => (f as { type?: string }).type === 'settled') as
+      | { approvalId: string; decision: string }
+      | undefined;
+    expect(settled).toMatchObject({ approvalId: request!.approvalId, decision: 'allow' });
+  });
+
+  it('broadcasts a settled frame with decision timeout on expiry', async () => {
+    const broker = new ApprovalBroker({ timeoutMs: 30 });
+    const frames: unknown[] = [];
+    broker.subscribe((frame) => frames.push(frame));
+    await broker.requestApproval({ sessionId: null, toolName: 'Bash', input: {} });
+    const settled = frames.find((f) => (f as { type?: string }).type === 'settled') as
+      | { decision: string }
+      | undefined;
+    expect(settled?.decision).toBe('timeout');
+  });
+
+  it('bounds the settled-id memory (minor 6)', async () => {
+    const broker = new ApprovalBroker({ timeoutMs: 60_000 });
+    for (let i = 0; i < 1002; i++) {
+      const pending = broker.requestApproval({ sessionId: null, toolName: 'T', input: {} });
+      const [request] = broker.listPending();
+      broker.decide(request!.approvalId, 'deny');
+      await pending;
+    }
+    // The settled set must not grow past its cap.
+    expect(broker.settledCount()).toBeLessThanOrEqual(1000);
   });
 });

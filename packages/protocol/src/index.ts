@@ -33,6 +33,14 @@ export interface ToolApprovalRequest {
   timeoutMs: number;
 }
 
+// Broadcast when an approval is decided or times out, so every connected
+// client can drop the card instead of showing a ghost until its own sweep.
+export interface ApprovalSettledFrame {
+  type: 'settled';
+  approvalId: string;
+  decision: ApprovalDecision | 'timeout';
+}
+
 export interface VaultNode {
   name: string;
   path: string;
