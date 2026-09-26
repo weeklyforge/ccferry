@@ -107,3 +107,47 @@ describe('TunnelServer AUTH (Review Focus 1)', () => {
     ws.close();
   });
 });
+
+describe('TunnelServer watchdog', () => {
+  it('terminates a silent authenticated peer past the pong timeout', async () => {
+    const t2 = new TunnelServer({ tunnelToken: 't', pingIntervalMs: 50, pongTimeoutMs: 250 });
+    const app2 = Fastify();
+    await app2.register(websocket);
+    t2.attach(app2);
+    await app2.listen({ port: 0, host: '127.0.0.1' });
+    const p2 = (app2.server.address() as { port: number }).port;
+    const ws = new WebSocket(`ws://127.0.0.1:${p2}/tunnel`);
+    const closed = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)));
+    ws.on('open', () => ws.send(encodeFrame(FrameType.Auth, 0, Buffer.from('t'))));
+    await nextFrame(ws); // AUTH_OK
+    expect(await closed).toBeTruthy(); // terminated by the watchdog
+    expect(t2.connectedPeerCount()).toBe(0);
+    await app2.close();
+  });
+
+  it('counts any authenticated inbound frame as liveness', async () => {
+    // DATA keeps flowing but no PONG is ever sent: the peer must survive
+    // well past the pong timeout (defends against a lost PONG on a busy link).
+    const t2 = new TunnelServer({ tunnelToken: 't', pingIntervalMs: 50, pongTimeoutMs: 250 });
+    const app2 = Fastify();
+    await app2.register(websocket);
+    t2.attach(app2);
+    await app2.listen({ port: 0, host: '127.0.0.1' });
+    const p2 = (app2.server.address() as { port: number }).port;
+    const ws = new WebSocket(`ws://127.0.0.1:${p2}/tunnel`);
+    ws.on('open', () => ws.send(encodeFrame(FrameType.Auth, 0, Buffer.from('t'))));
+    await nextFrame(ws); // AUTH_OK
+    const iv = setInterval(() => {
+      try {
+        ws.send(encodeFrame(FrameType.Data, 0x8000_0000, Buffer.from('x')));
+      } catch {
+        clearInterval(iv);
+      }
+    }, 80);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    clearInterval(iv);
+    expect(t2.connectedPeerCount()).toBe(1);
+    ws.close();
+    await app2.close();
+  });
+});

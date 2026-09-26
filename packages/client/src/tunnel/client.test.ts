@@ -108,6 +108,30 @@ describe('TunnelClient (Review Focus 2, 3)', () => {
   });
 });
 
+describe('TunnelClient keepalive', () => {
+  it('answers server PING so the watchdog keeps the tunnel alive', async () => {
+    // Accelerated stack: PING every 40ms, watchdog 200ms. Without a PONG the
+    // peer is terminated within ~240ms of AUTH_OK; with PONG it stays up.
+    const tunnel = new TunnelServer({ tunnelToken: 'tt', pingIntervalMs: 40, pongTimeoutMs: 200 });
+    const router = new StreamRouter({ tunnel });
+    const app2 = Fastify();
+    await app2.register(websocket);
+    tunnel.attach(app2);
+    router.register(app2);
+    await app2.listen({ port: 0, host: '127.0.0.1' });
+    const port2 = (app2.server.address() as { port: number }).port;
+    client = makeClient({ url: `ws://127.0.0.1:${port2}/tunnel` });
+    client.start();
+    try {
+      await client.waitForConnected();
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      expect(tunnel.connectedPeerCount()).toBe(1);
+    } finally {
+      await app2.close();
+    }
+  });
+});
+
 describe('TunnelClient event bridge (Review Focus 4)', () => {
   it('sends the pending snapshot and tunnel-connected on AUTH_OK, then forwards live broker frames', async () => {
     const seen: Array<Record<string, unknown>> = [];

@@ -105,6 +105,9 @@ export class TunnelServer {
       peer.socket.send(encodeFrame(FrameType.AuthOk, 0, Buffer.alloc(0)));
       return;
     }
+    // Any authenticated inbound frame proves the peer is alive — defends a
+    // busy link where a PONG can be lost while DATA keeps flowing.
+    peer.lastPongAt = Date.now();
     for (const handler of this.frameHandlers) handler(frame);
   }
 

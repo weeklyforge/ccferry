@@ -145,6 +145,12 @@ export class TunnelClient {
   }
 
   private onFrame(frame: Frame): void {
+    if (frame.type === FrameType.Ping) {
+      // The cloud watchdog terminates the peer unless PONGs arrive; answer
+      // every PING even mid-stream.
+      this.send(FrameType.Pong, 0, Buffer.alloc(0));
+      return;
+    }
     if (frame.type === FrameType.AuthOk) {
       this.attempt = 0;
       this.socket = this.activeSocket;
