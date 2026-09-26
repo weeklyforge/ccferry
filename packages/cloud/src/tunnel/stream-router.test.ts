@@ -1,0 +1,128 @@
+import Fastify from 'fastify';
+import websocket from '@fastify/websocket';
+import WebSocket from 'ws';
+import { Buffer } from 'node:buffer';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  FrameType,
+  OPEN_KIND,
+  decodeFrames,
+  decodeOpenMeta,
+  encodeFrame,
+  encodeOpen,
+} from '@ccferry/protocol/src/frame';
+import { TunnelServer } from './server';
+import { StreamRouter } from './stream-router';
+
+let app: ReturnType<typeof Fastify>;
+let tunnel: TunnelServer;
+let router: StreamRouter;
+let port: number;
+let pc: WebSocket;
+
+beforeEach(async () => {
+  tunnel = new TunnelServer({ tunnelToken: 't' });
+  router = new StreamRouter({ tunnel, requestTimeoutMs: 2000 });
+  app = Fastify();
+  await app.register(websocket);
+  tunnel.attach(app);
+  router.register(app);
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  port = (app.server.address() as { port: number }).port;
+  // Fake PC peer: authenticate.
+  pc = new WebSocket(`ws://127.0.0.1:${port}/tunnel`);
+  await new Promise((resolve) => pc.on('open', resolve));
+  pc.send(encodeFrame(FrameType.Auth, 0, Buffer.from('t')));
+  await new Promise<void>((resolve) =>
+    pc.once('message', (d) => {
+      if (decodeFrames(Buffer.from(d as Buffer)).frames[0]!.type === FrameType.AuthOk) resolve();
+    }),
+  );
+});
+
+afterEach(async () => {
+  pc.close();
+  await app.close();
+});
+
+function servePcResponse(
+  handler: (open: { streamId: number; meta: Record<string, unknown> }, reply: (frame: Buffer) => void) => void,
+): void {
+  pc.on('message', (data) => {
+    for (const frame of decodeFrames(Buffer.from(data as Buffer)).frames) {
+      if (frame.type === FrameType.Open) {
+        const { kind, meta } = decodeOpenMeta(frame.payload);
+        void kind;
+        handler({ streamId: frame.streamId, meta }, (replyFrame) => pc.send(replyFrame));
+      }
+    }
+  });
+}
+
+describe('StreamRouter (Review Focus 2, 3)', () => {
+  it('maps a phone request through the tunnel and back', async () => {
+    servePcResponse(({ streamId, meta }, reply) => {
+      expect(meta['path']).toBe('/api/projects');
+      reply(encodeFrame(FrameType.Data, streamId, Buffer.from(JSON.stringify({ status: 200, headers: { 'content-type': 'application/json' } }))));
+      reply(encodeFrame(FrameType.Data, streamId, Buffer.from('{"projects":[]}')));
+      reply(encodeFrame(FrameType.Close, streamId, Buffer.from([0, 0])));
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/projects' });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe('{"projects":[]}');
+  });
+
+  it('streams SSE chunk-by-chunk without waiting for CLOSE (Review Focus 3)', async () => {
+    const instance = Fastify();
+    await instance.register(websocket);
+    const t2 = new TunnelServer({ tunnelToken: 't' });
+    const r2 = new StreamRouter({ tunnel: t2 });
+    t2.attach(instance);
+    r2.register(instance);
+    await instance.listen({ port: 0, host: '127.0.0.1' });
+    const p2 = (instance.server.address() as { port: number }).port;
+    const pc2 = new WebSocket(`ws://127.0.0.1:${p2}/tunnel`);
+    await new Promise((resolve) => pc2.on('open', resolve));
+    pc2.send(encodeFrame(FrameType.Auth, 0, Buffer.from('t')));
+    await new Promise<void>((resolve) => pc2.once('message', () => resolve()));
+    pc2.on('message', (data) => {
+      for (const frame of decodeFrames(Buffer.from(data as Buffer)).frames) {
+        if (frame.type === FrameType.Open) {
+          pc2.send(encodeFrame(FrameType.Data, frame.streamId, Buffer.from(JSON.stringify({ status: 200, headers: { 'content-type': 'text/event-stream' } }))));
+          pc2.send(encodeFrame(FrameType.Data, frame.streamId, Buffer.from('data: early\n\n')));
+        }
+      }
+    });
+    const controller = new AbortController();
+    const response = await fetch(`http://127.0.0.1:${p2}/api/anything`, { signal: controller.signal });
+    const reader = response.body!.getReader();
+    const { value } = await reader.read();
+    const flushedEarly = new TextDecoder().decode(value ?? new Uint8Array()).includes('early');
+    controller.abort();
+    pc2.close();
+    await instance.close();
+    expect(flushedEarly).toBe(true);
+  });
+
+  it('answers 502 immediately when the tunnel is down (Review Focus 2)', async () => {
+    pc.close();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const res = await app.inject({ method: 'GET', url: '/api/projects' });
+    expect(res.statusCode).toBe(502);
+    expect(res.json()).toEqual({ error: 'tunnel_down' });
+  });
+
+  it('answers 502 when the PC side reports an error close', async () => {
+    servePcResponse(({ streamId }, reply) => {
+      reply(encodeFrame(FrameType.Close, streamId, Buffer.from([0, 1])));
+    });
+    const res = await app.inject({ method: 'GET', url: '/api/projects' });
+    expect(res.statusCode).toBe(502);
+  });
+
+  it('times out stalled streams', async () => {
+    servePcResponse(() => undefined); // PC never replies
+    const res = await app.inject({ method: 'GET', url: '/api/slow' });
+    expect(res.statusCode).toBe(502);
+  });
+});
