@@ -3,6 +3,8 @@ import type { FastifyInstance } from 'fastify';
 import type { SessionDriver } from '../driver/driver';
 import type { ApprovalBroker } from '../approval/broker';
 import { registerApprovalRoutes } from './approval-routes';
+import { registerNewSessionRoute } from './new-session-route';
+import { registerVaultRoutes } from './vault-routes';
 import { startSse } from './sse';
 
 const ACTIVE_WINDOW_MS = 120_000;
@@ -16,6 +18,7 @@ const ALLOWED_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '::1']);
 export interface ServerOptions {
   logger?: boolean;
   broker?: ApprovalBroker;
+  vaultRoot?: string | null;
 }
 
 export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): FastifyInstance {
@@ -85,6 +88,8 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
   });
 
   if (opts.broker) registerApprovalRoutes(app, opts.broker);
+  registerVaultRoutes(app, opts.vaultRoot ?? null);
+  registerNewSessionRoute(app, driver);
 
   return app;
 }

@@ -117,6 +117,25 @@ describe('api server', () => {
     expect(res.body).toContain('echo:hi');
   });
 
+  it('POST /api/messages starts a new session and streams DriverEvents', async () => {
+    const app = buildServer(new FakeDriver([], [session()]));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/messages',
+      payload: { projectPath: 'D:\\work\\proj A', text: 'hello' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.body).toContain('echo:hello');
+    expect(res.body).toContain('"sessionId":"new-session"');
+  });
+
+  it('POST /api/messages validates the body', async () => {
+    const app = buildServer(new FakeDriver([], [session()]));
+    const res = await app.inject({ method: 'POST', url: '/api/messages', payload: { projectPath: 'D:\\x' } });
+    expect(res.statusCode).toBe(400);
+  });
+
   it('POST messages returns 400 without text and 404 for unknown sessions', async () => {
     const app = buildServer(new FakeDriver([], [session()]));
     const missing = await app.inject({

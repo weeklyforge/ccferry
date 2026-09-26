@@ -17,7 +17,7 @@ const app = buildServer(
     whitelist: config.toolWhitelist,
     scan: cachedScan(claudeDir, 5000),
   }),
-  { broker, logger: true },
+  { broker, vaultRoot: config.vaultPath ?? null, logger: true },
 );
 app
   .listen({ port, host: '127.0.0.1' })
