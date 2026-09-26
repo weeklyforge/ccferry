@@ -108,6 +108,59 @@ describe('TunnelServer AUTH (Review Focus 1)', () => {
   });
 });
 
+describe('TunnelServer ban keying (behind Caddy)', () => {
+  function connectWith(headers: Record<string, string>): WebSocket {
+    return new WebSocket(`ws://127.0.0.1:${port}/tunnel`, { headers });
+  }
+
+  async function failAuth(ws: WebSocket): Promise<void> {
+    const closed = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)));
+    ws.on('open', () => ws.send(encodeFrame(FrameType.Auth, 0, Buffer.from('wrong'))));
+    await closed;
+  }
+
+  // Without XFF keying every ban lands on Caddy's loopback address, so a
+  // remote attacker locks out the legitimate PC (review I1).
+  it('keys the ban on the last x-forwarded-for entry behind a loopback proxy', async () => {
+    for (let i = 0; i < 5; i++) await failAuth(connectWith({ 'x-forwarded-for': '1.1.1.1, 9.9.9.9' }));
+    // same real client (spoofed prefix dropped, last entry keys the ban)
+    const banned = connectWith({ 'x-forwarded-for': '9.9.9.9' });
+    const closed = new Promise<number>((resolve) => banned.on('close', (code) => resolve(code)));
+    banned.on('open', () => banned.send(encodeFrame(FrameType.Auth, 0, Buffer.from('secret-token'))));
+    expect(await closed).toBe(4403);
+    // a different real client is unaffected
+    const ws = connectWith({ 'x-forwarded-for': '1.2.3.4' });
+    const okFrame = nextFrame(ws);
+    ws.on('open', () => ws.send(encodeFrame(FrameType.Auth, 0, Buffer.from('secret-token'))));
+    expect((await okFrame).type).toBe(FrameType.AuthOk);
+    ws.close();
+  });
+
+  it('expires bans and resets the failure window', async () => {
+    const t2 = new TunnelServer({ tunnelToken: 't', authFailWindowMs: 150, banMs: 150 });
+    const app2 = Fastify();
+    await app2.register(websocket);
+    t2.attach(app2);
+    await app2.listen({ port: 0, host: '127.0.0.1' });
+    const p2 = (app2.server.address() as { port: number }).port;
+    const strike = async (): Promise<void> => {
+      const ws = new WebSocket(`ws://127.0.0.1:${p2}/tunnel`);
+      const closed = new Promise<number>((resolve) => ws.on('close', (code) => resolve(code)));
+      ws.on('open', () => ws.send(encodeFrame(FrameType.Auth, 0, Buffer.from('nope'))));
+      await closed;
+    };
+    for (let i = 0; i < 4; i++) await strike();
+    await new Promise((resolve) => setTimeout(resolve, 250)); // window elapsed
+    await strike(); // fresh window — count restarted, no ban yet
+    const ws = new WebSocket(`ws://127.0.0.1:${p2}/tunnel`);
+    const ok = nextFrame(ws);
+    ws.on('open', () => ws.send(encodeFrame(FrameType.Auth, 0, Buffer.from('t'))));
+    expect((await ok).type).toBe(FrameType.AuthOk);
+    ws.close();
+    await app2.close();
+  });
+});
+
 describe('TunnelServer watchdog', () => {
   it('terminates a silent authenticated peer past the pong timeout', async () => {
     const t2 = new TunnelServer({ tunnelToken: 't', pingIntervalMs: 50, pongTimeoutMs: 250 });

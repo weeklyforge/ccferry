@@ -7,11 +7,24 @@ import { FrameType, decodeFrames, encodeFrame, type Frame } from '@ccferry/proto
 const AUTH_FAIL_LIMIT = 5;
 const AUTH_FAIL_WINDOW_MS = 60_000;
 const BAN_MS = 10 * 60_000;
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 interface Peer {
   socket: WebSocket;
   authenticated: boolean;
   lastPongAt: number;
+}
+
+// Behind Caddy the TCP peer is always loopback; key bans on the forwarded
+// client IP instead, or one attacker bans the proxy for everyone (review I1).
+// The LAST XFF entry is ours (Caddy appends); a spoofed prefix cannot rotate it.
+function clientIp(direct: string, xff: string | string[] | undefined): string {
+  if (LOOPBACK.has(direct)) {
+    const header = Array.isArray(xff) ? xff[0] : xff;
+    const last = header?.split(',').pop()?.trim();
+    if (last) return last;
+  }
+  return direct;
 }
 
 export class TunnelServer {
@@ -20,21 +33,29 @@ export class TunnelServer {
   private readonly peerDropHandlers = new Set<() => void>();
   private readonly failures = new Map<string, { count: number; windowStart: number }>();
   private readonly bans = new Map<string, number>();
+  private readonly authFailWindowMs: number;
+  private readonly banMs: number;
 
   constructor(
     private readonly opts: {
       tunnelToken: string;
       pingIntervalMs?: number;
       pongTimeoutMs?: number;
+      authFailWindowMs?: number;
+      banMs?: number;
     },
-  ) {}
+  ) {
+    this.authFailWindowMs = opts.authFailWindowMs ?? AUTH_FAIL_WINDOW_MS;
+    this.banMs = opts.banMs ?? BAN_MS;
+  }
 
   attach(app: FastifyInstance): void {
     const pingMs = this.opts.pingIntervalMs ?? 30_000;
     const pongTimeoutMs = this.opts.pongTimeoutMs ?? 60_000;
     app.get('/tunnel', { websocket: true }, (socket, request) => {
-      const ip = request.socket.remoteAddress ?? 'unknown';
-      if (this.bans.get(ip) && Date.now() < this.bans.get(ip)!) {
+      const ip = clientIp(request.socket.remoteAddress ?? 'unknown', request.headers['x-forwarded-for']);
+      this.prune(Date.now());
+      if (this.bans.has(ip)) {
         socket.close(4403, 'banned');
         return;
       }
@@ -126,15 +147,27 @@ export class TunnelServer {
 
   private recordFailure(ip: string): void {
     const now = Date.now();
+    this.prune(now);
     const entry = this.failures.get(ip);
-    if (!entry || now - entry.windowStart > AUTH_FAIL_WINDOW_MS) {
+    if (!entry || now - entry.windowStart > this.authFailWindowMs) {
       this.failures.set(ip, { count: 1, windowStart: now });
       return;
     }
     entry.count += 1;
     if (entry.count >= AUTH_FAIL_LIMIT) {
-      this.bans.set(ip, now + BAN_MS);
+      this.bans.set(ip, now + this.banMs);
       this.failures.delete(ip);
+    }
+  }
+
+  // Both maps are keyed by unbounded client IPs; drop what has expired so a
+  // long-running server does not accumulate entries forever.
+  private prune(now: number): void {
+    for (const [ip, until] of this.bans) {
+      if (now >= until) this.bans.delete(ip);
+    }
+    for (const [ip, entry] of this.failures) {
+      if (now - entry.windowStart > this.authFailWindowMs) this.failures.delete(ip);
     }
   }
 
