@@ -26,6 +26,9 @@
     "vite": "^7.0.0",
     "vite-plugin-pwa": "^1.0.0",
     "vitest": "^5.0.0",
-    "vue-tsc": "^3.0.0"
+    "vue-tsc": "^3.0.0",
+    "workbox-core": "^7.4.1",
+    "workbox-precaching": "^7.4.1",
+    "workbox-routing": "^7.4.1"
   }
 }

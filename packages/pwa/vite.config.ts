@@ -7,6 +7,9 @@ export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       manifest: {
         name: 'ccferry',
@@ -16,7 +19,6 @@ export default defineConfig({
         theme_color: '#1989fa',
         icons: [],
       },
-      workbox: { navigateFallback: '/index.html' },
     }),
   ],
   server: { proxy: { '/api': 'http://127.0.0.1:8787' } },
