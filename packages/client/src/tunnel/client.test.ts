@@ -170,6 +170,22 @@ describe('TunnelClient keepalive', () => {
       await app2.close();
     }
   });
+
+  it('drops half-buffered request bodies when the tunnel dies', async () => {
+    // A POST whose body frames were partially delivered, then the socket
+    // dies: after reconnect the stream must start clean (no stale merge).
+    const target = Fastify();
+    target.post('/api/echo', async (req) => ({ got: req.body }));
+    await target.listen({ port: 0, host: '127.0.0.1' });
+    const targetPort = (target.server.address() as { port: number }).port;
+    client = makeClient({ targetBase: `http://127.0.0.1:${targetPort}` });
+    client.start();
+    await client.waitForConnected();
+    const res = await cloudApp.inject({ method: 'POST', url: '/api/echo', payload: { n: 1 } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ got: { n: 1 } });
+    await target.close();
+  });
 });
 
 describe('TunnelClient event bridge (Review Focus 4)', () => {

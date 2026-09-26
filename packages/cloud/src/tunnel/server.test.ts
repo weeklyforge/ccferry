@@ -203,4 +203,29 @@ describe('TunnelServer watchdog', () => {
     ws.close();
     await app2.close();
   });
+
+  it('sends pings to the peer that owns the timer, not the current peer', async () => {
+    // peer A authenticates, then gets kicked by peer B; A's timer must never
+    // send frames through B — B stays connected and healthy.
+    const t2 = new TunnelServer({ tunnelToken: 't', pingIntervalMs: 30, pongTimeoutMs: 10_000 });
+    const app2 = Fastify();
+    await app2.register(websocket);
+    t2.attach(app2);
+    await app2.listen({ port: 0, host: '127.0.0.1' });
+    const p2 = (app2.server.address() as { port: number }).port;
+    const a = new WebSocket(`ws://127.0.0.1:${p2}/tunnel`);
+    await new Promise((resolve) => a.on('open', resolve));
+    a.send(encodeFrame(FrameType.Auth, 0, Buffer.from('t')));
+    await nextFrame(a);
+    const kicked = new Promise<number>((resolve) => a.on('close', (code) => resolve(code)));
+    const b = new WebSocket(`ws://127.0.0.1:${p2}/tunnel`);
+    await new Promise((resolve) => b.on('open', resolve));
+    b.send(encodeFrame(FrameType.Auth, 0, Buffer.from('t')));
+    await nextFrame(b);
+    expect(await kicked).toBe(4400);
+    await new Promise((resolve) => setTimeout(resolve, 200)); // A's timer fires against a dead peer
+    expect(t2.connectedPeerCount()).toBe(1); // B unaffected
+    b.close();
+    await app2.close();
+  });
 });

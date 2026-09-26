@@ -107,6 +107,7 @@ export class TunnelClient {
       }
       this.aborts.forEach((controller) => controller.abort()); // Review Focus 2
       this.aborts.clear();
+      this.requestBuffers.clear(); // half-buffered bodies must not merge into the next connection
       this.log('tunnel closed, reconnecting');
       if (this.stopped) return;
       const delay = nextDelayMs(this.attempt);

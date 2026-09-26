@@ -1,6 +1,5 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
-import { Buffer } from 'node:buffer';
 import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
@@ -68,11 +67,9 @@ export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInsta
   if (pwaDir && existsSync(pwaDir)) {
     await app.register(fastifyStatic, { root: pwaDir });
     app.setNotFoundHandler((req, reply) => {
-      if (req.url.startsWith('/api')) return reply.code(404).send({ error: 'not found' });
+      if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'not found' });
       return reply.sendFile('index.html');
     });
   }
   return app;
 }
-
-void Buffer; // keep node:buffer import aligned with tunnel module expectations

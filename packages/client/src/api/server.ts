@@ -29,7 +29,7 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
   app.addHook('onRequest', async (req, reply) => {
     if (opts.token) {
       // Token mode (LAN): the token is the gate; Bearer header or ?token= (SSE).
-      if (!req.url.startsWith('/api')) return; // static PWA shell stays open
+      if (!req.url.startsWith('/api/')) return; // static PWA shell stays open
       const header = req.headers['authorization'];
       const query = req.query as Record<string, unknown>;
       const bearer = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;

@@ -69,7 +69,9 @@ export class TunnelServer {
           return;
         }
         try {
-          this.send(FrameType.Ping, 0, Buffer.alloc(0));
+          // The peer's own socket, never the current peer: a kicked peer's
+          // timer must not push frames through its replacement.
+          peer.socket.send(encodeFrame(FrameType.Ping, 0, Buffer.alloc(0)));
         } catch {
           // send-after-close race — the close handler cleans up
         }

@@ -22,4 +22,12 @@ describe('phone auth hook', () => {
     const res = await app.inject({ method: 'GET', url: '/' });
     expect(res.statusCode).toBe(200);
   });
+
+  it('does not treat /apifoo as an api route', async () => {
+    const app = Fastify();
+    app.addHook('onRequest', createPhoneAuthHook('phone-secret'));
+    app.get('/apifoo', async () => 'not-api');
+    const res = await app.inject({ method: 'GET', url: '/apifoo' });
+    expect(res.statusCode).toBe(200); // no 401 — the prefix check is exact
+  });
 });

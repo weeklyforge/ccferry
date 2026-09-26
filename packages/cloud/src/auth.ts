@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 
 export function createPhoneAuthHook(token: string): (req: FastifyRequest, reply: FastifyReply) => Promise<void> {
   return async (req, reply) => {
-    if (!req.url.startsWith('/api')) return; // static PWA shell stays open
+    if (!req.url.startsWith('/api/')) return; // static PWA shell stays open
     const header = req.headers['authorization'];
     const query = req.query as Record<string, unknown>;
     const bearer = header?.startsWith('Bearer ') ? header.slice('Bearer '.length) : undefined;

@@ -34,7 +34,7 @@ const app = buildServer(
 if (existsSync(pwaDir)) {
   await app.register(fastifyStatic, { root: pwaDir });
   app.setNotFoundHandler((req, reply) => {
-    if (req.url.startsWith('/api')) return reply.code(404).send({ error: 'not found' });
+    if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'not found' });
     return reply.sendFile('index.html');
   });
 } else {

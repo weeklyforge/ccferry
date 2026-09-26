@@ -129,6 +129,26 @@ describe('StreamRouter (Review Focus 2, 3)', () => {
     expect(res.statusCode).toBe(502);
   });
 
+  it('strips the phone token from the forwarded path', async () => {
+    let seenPath: string | undefined;
+    const seenPathPromise = new Promise<string>((resolve) => {
+      pc.removeAllListeners('message');
+      pc.on('message', (data) => {
+        for (const frame of decodeFrames(Buffer.from(data as Buffer)).frames) {
+          if (frame.type === FrameType.Open) {
+            const meta = decodeOpenMeta(frame.payload).meta as Record<string, unknown>;
+            seenPath = meta['path'] as string;
+            resolve(seenPath!);
+            pc.send(encodeFrame(FrameType.Data, frame.streamId, Buffer.from(JSON.stringify({ status: 200, headers: {} }))));
+            pc.send(encodeFrame(FrameType.Close, frame.streamId, Buffer.from([0, 0])));
+          }
+        }
+      });
+    });
+    await app.inject({ method: 'GET', url: '/api/projects?token=secret-phone-token' });
+    expect(await seenPathPromise).toBe('/api/projects');
+  });
+
   it('keeps a slow but active stream alive past the idle timeout', async () => {
     // A resumed session's first byte can exceed the timeout while streaming
     // fine — DATA activity must reset the idle timer (fix-forward #2).

@@ -44,6 +44,11 @@ export class StreamRouter {
       body = typeof req.body === 'string' ? Buffer.from(req.body) : Buffer.from(JSON.stringify(req.body));
       headers['content-type'] = headers['content-type'] ?? 'application/json';
     }
+    // The phone token authenticates at the cloud only — never forward it to
+    // the PC daemon.
+    const url = new URL(req.url, 'http://local');
+    url.searchParams.delete('token');
+    const forwardPath = `${url.pathname}${url.search}`;
     const timer = setTimeout(() => this.fail(streamId), this.timeoutMs);
     this.pending.set(streamId, {
       req,
@@ -66,7 +71,7 @@ export class StreamRouter {
     // issue the upstream fetch (no separate end-of-request frame in v0).
     const open = encodeOpen(streamId, OPEN_KIND.http, {
       method: req.method,
-      path: req.url,
+      path: forwardPath,
       headers,
       bodyBytes: body.length,
     });
