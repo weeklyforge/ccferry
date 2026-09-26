@@ -50,4 +50,16 @@ Evidence log for the M3 plan.
 2. **`tunnel_timeout` on slow resumes** — fixed 30s request timeout killed resumed sessions whose first byte exceeds it; timeout now resets on every DATA frame (idle semantics).
 3. **Session view loaded the whole file** (owner: "为什么这么多?") — tailer gained `fromByte` with partial-line skipping, stream route accepts `tailBytes`, PWA defaults to a 256KB recent window with a load-full-history button.
 
+## Post-acceptance bounded change: markdown rendering + search highlight (2026-09-26)
+
+Owner reported session/vault content showing as raw markdown. Bounded change on the M3 branch (PWA-only, after the frozen review range):
+
+- `lib/markdown.ts` — marked (gfm + breaks) → DOMPurify sanitize; Obsidian wikilink extension renders `[[note]]` / `[[note|alias]]` as a highlighted non-navigable span (jump support deferred to M4). Memoized (500 entries): session streaming re-renders the bubble list per incoming line.
+- SessionView: assistant bubbles render markdown via `v-html` on sanitized output; user/tool/raw bubbles stay plain text.
+- NoteEditor: read/edit dual mode — notes open in a rendered reading view, explicit button switches to the textarea, save returns to the reading view.
+- Vault search results highlight the keyword: `lib/highlight.ts` segments mirror the daemon's case-insensitive substring search; template segments (no v-html) keep arbitrary note text safe.
+- XSS: session transcripts and vault notes can quote arbitrary HTML — sanitize is mandatory before v-html; pinned by tests (script tag and onerror stripping).
+- Tests: markdown 8 (jsdom env per-file) + highlight 4; suite 141/141; rebuilt dist scp'd to the cloud (served as `index-Ctj587Tg.js`).
+
+
 
