@@ -148,7 +148,7 @@ describe('api server', () => {
   });
 
   it('POST /api/messages starts a new session and streams DriverEvents', async () => {
-    const app = buildServer(new FakeDriver([], [session()]));
+    const app = buildServer(new FakeDriver([{ projectPath: 'D:\\work\\proj A', sessionCount: 1 }], [session()]));
     const res = await app.inject({
       method: 'POST',
       url: '/api/messages',

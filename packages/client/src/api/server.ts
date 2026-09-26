@@ -111,7 +111,7 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
 
   if (opts.broker) registerApprovalRoutes(app, opts.broker);
   registerVaultRoutes(app, opts.vaultRoot ?? null);
-  registerNewSessionRoute(app, driver);
+  registerNewSessionRoute(app, driver, opts.vaultRoot ?? null);
 
   return app;
 }
