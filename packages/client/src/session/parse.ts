@@ -2,15 +2,15 @@ import type { ParsedLine } from '@ccferry/protocol';
 
 export function parseLine(raw: string, lineNo: number): ParsedLine {
   const trimmed = raw.trim();
-  if (!trimmed) return { ok: false, line: lineNo };
+  if (!trimmed) return { ok: false, line: lineNo, raw };
   try {
     const json: unknown = JSON.parse(trimmed);
     if (json === null || typeof json !== 'object' || Array.isArray(json)) {
-      return { ok: false, line: lineNo };
+      return { ok: false, line: lineNo, raw };
     }
     return { ok: true, line: lineNo, json: json as Record<string, unknown> };
   } catch {
-    return { ok: false, line: lineNo };
+    return { ok: false, line: lineNo, raw };
   }
 }
 

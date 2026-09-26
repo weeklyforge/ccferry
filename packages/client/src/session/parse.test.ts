@@ -7,13 +7,13 @@ describe('parseLine', () => {
     expect(line).toEqual({ ok: true, line: 1, json: { type: 'user' } });
   });
 
-  it('returns ok:false for a half-written line (Review Focus 1)', () => {
+  it('returns ok:false with the raw text for a half-written line (Review Focus 1)', () => {
     const line = parseLine('{"type":"user",', 2);
-    expect(line).toEqual({ ok: false, line: 2 });
+    expect(line).toEqual({ ok: false, line: 2, raw: '{"type":"user",' });
   });
 
   it('returns ok:false for blank and non-object lines', () => {
-    expect(parseLine('', 3).ok).toBe(false);
+    expect(parseLine('', 3)).toEqual({ ok: false, line: 3, raw: '' });
     expect(parseLine('42', 4).ok).toBe(false);
     expect(parseLine('null', 5).ok).toBe(false);
   });
