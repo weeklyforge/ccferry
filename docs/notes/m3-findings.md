@@ -30,7 +30,15 @@ Evidence log for the M3 plan.
 
 ## Spike S3: WSS keepalive
 
-- After 5+ minutes fully idle, `/api/approvals?token=…` through the tunnel returned `200` — the 30s PING / 60s watchdog held the connection with no reconnect. Verdict: **PASS, default intervals stand**.
+- ~~After 5+ minutes fully idle, `/api/approvals?token=…` through the tunnel returned `200` — the 30s PING / 60s watchdog held the connection with no reconnect. Verdict: **PASS, default intervals stand**.~~
+- **Retracted by the final review**: the original client never answered PING, so the "held connection" was actually a reconnect cycle (~90s kill → ~1s down → re-auth). A single 200 cannot distinguish the two. See the final-review section for the C1 fix and the S3 re-run below.
+
+### S3 re-run with evidence (post-C1, 2026-09-26)
+
+- Tunnel (fixed client) authenticated 21:11:37; observed fully idle past 21:17 — **0** `tunnel closed, reconnecting` lines in the PC daemon log, **0** tunnel/websocket error entries in `journalctl -u ccferry-cloud` for the window, service `active`, daemon API `200`.
+- 5.5 idle minutes span ~5 of the old defect's kill cycles, so zero reconnects distinguishes a held connection from the old cycle — the thing the original single-200 check could not do.
+- Plus regression tests at accelerated intervals (client answers PING; authenticated DATA counts as liveness) pin the behavior in CI.
+- Verdict: **PASS stands, default 30s/60s intervals**, now evidence-backed.
 
 ## Acceptance (Task 12, owner-confirmed 2026-09-26)
 
@@ -60,6 +68,21 @@ Owner reported session/vault content showing as raw markdown. Bounded change on 
 - Vault search results highlight the keyword: `lib/highlight.ts` segments mirror the daemon's case-insensitive substring search; template segments (no v-html) keep arbitrary note text safe.
 - XSS: session transcripts and vault notes can quote arbitrary HTML — sanitize is mandatory before v-html; pinned by tests (script tag and onerror stripping).
 - Tests: markdown 8 (jsdom env per-file) + highlight 4; suite 141/141; rebuilt dist scp'd to the cloud (served as `index-Ctj587Tg.js`).
+
+## Final review (Opus) and fix pass (2026-09-26)
+
+Reviewer verdict on 29e121c..db0742b: **"No — with fixes"** — 2 Critical, 4 Important, 9 Minor, all Critical/Important empirically reproven in a throwaway worktree. Fixed the same day under the owner's standing fix-without-waiting authorization:
+
+- **C1 — the PC never answered PING.** The cloud watchdog terminated every tunnel ~60-90s after AUTH_OK; long streams were severed mid-flight and EventSource auto-reconnect masked it as "4G flakiness". Client now PONGs; the cloud also counts any authenticated inbound frame as liveness. This also falsified the original S3 "PASS" below — a single 200 at the 5-minute mark cannot distinguish a held connection from a ~98%-availability reconnect cycle. Re-run with log evidence: see S3 re-run.
+- **C2 — a tunnel drop left in-flight requests hanging until the 30s idle timeout** instead of the spec's immediate 502. `onPeerDrop` now fails all pending streams (502 before headers, raw destroy mid-stream).
+- **I1 — AUTH bans keyed on Caddy's loopback address**, so a remote attacker could keep the legitimate PC banned indefinitely with 5 bad AUTHs. Bans now key on the last `x-forwarded-for` entry behind loopback; maps prune expired entries.
+- **I2 — spec backpressure v0 was never implemented.** Client holds DATA while `bufferedAmount > 16MB`; cloud writes responses through an ordered writer honoring socket drain (CLOSE waits for queued DATA via `flush()` — a race the new tests caught).
+- **I3 — phone disconnects never propagated.** Cloud now sends CLOSE when the phone hangs up mid-response; the PC aborts the upstream fetch (and the agent run behind it) instead of streaming to a dead phone.
+- **I4 — acceptance fix-forwards lacked regression tests**: activity-reset timeout and tailBytes route arithmetic now pinned.
+- 9 Minors deferred to the ledger (OPEN-frame hand-decode, forwarded `?token=`, multi-value headers, 1MB body limit, ping-timer peer aliasing, `/api` prefix match, `void Buffer`, requestBuffers on raw close, daemon stop handler).
+- Suite after the pass: **162/162** (protocol 8, cloud 30, pwa 30, client 94); typecheck clean; both ends redeployed (cloud restarted active; PWA re-uploaded).
+
+Owner-visible symptom explained: the repeated "哪天考试?" bubbles were C1 (tunnel killed every ~90s) × the PWA's EventSource auto-reconnect replaying the 256KB tail without clearing (`sse-follow.ts` now resets the view on reconnect, commit 823ac97).
 
 
 
