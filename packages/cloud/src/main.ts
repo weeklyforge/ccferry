@@ -10,7 +10,16 @@ if (!phoneToken || !tunnelToken) {
   process.exit(1);
 }
 
-const app = await buildCloudApp({ tunnelToken, phoneToken, pwaDir });
+const vapidPublicKey = process.env['VAPID_PUBLIC_KEY'];
+const vapidPrivateKey = process.env['VAPID_PRIVATE_KEY'];
+const vapid =
+  vapidPublicKey && vapidPrivateKey
+    ? { publicKey: vapidPublicKey, privateKey: vapidPrivateKey, subject: process.env['VAPID_SUBJECT'] ?? 'mailto:ccferry@localhost' }
+    : null;
+console.log(vapid ? 'push: enabled' : 'push: disabled (no VAPID keys)');
+const subscriptionsPath = process.env['CCFERRY_PUSH_SUBS'] ?? null;
+
+const app = await buildCloudApp({ tunnelToken, phoneToken, pwaDir, vapid, subscriptionsPath });
 app
   .listen({ port, host: '127.0.0.1' })
   .then(() => console.log(`ccferry-cloud listening on 127.0.0.1:${port} (behind Caddy)`))

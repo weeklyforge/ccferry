@@ -69,4 +69,13 @@ describe('cloud app', () => {
     const res = await fetch(`http://127.0.0.1:${port}/api/projects?token=pt`);
     expect(res.status).toBe(502);
   });
+
+  it('exposes push routes and reports unconfigured without VAPID', async () => {
+    const key = await fetch(`http://127.0.0.1:${port}/api/push/key?token=pt`);
+    expect(key.status).toBe(503); // vapid null → push not configured
+    const test = await fetch(`http://127.0.0.1:${port}/api/push/test?token=pt`, { method: 'POST' });
+    expect(test.status).toBe(503);
+    const guarded = await fetch(`http://127.0.0.1:${port}/api/push/key`);
+    expect(guarded.status).toBe(401); // still behind the phone token gate
+  });
 });

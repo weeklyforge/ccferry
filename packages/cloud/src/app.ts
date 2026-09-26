@@ -7,6 +7,9 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { FrameType } from '@ccferry/protocol/src/frame';
 import { createPhoneAuthHook } from './auth';
 import { EventBuffer } from './events/buffer';
+import { registerPushRoutes } from './api/push-routes';
+import { attachPushSender, sendTestPush } from './push/sender';
+import { SubscriptionStore, type PushSubscription } from './push/store';
 import { startSseLike } from './sse';
 import { StreamRouter } from './tunnel/stream-router';
 import { TunnelServer } from './tunnel/server';
@@ -18,6 +21,8 @@ export interface CloudAppOptions {
   tunnelToken: string;
   phoneToken: string;
   pwaDir?: string | null;
+  vapid?: { publicKey: string; privateKey: string; subject: string } | null;
+  subscriptionsPath?: string | null;
 }
 
 export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInstance> {
@@ -31,6 +36,28 @@ export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInsta
   const tunnel = new TunnelServer({ tunnelToken: opts.tunnelToken });
   const router = new StreamRouter({ tunnel });
   const events = new EventBuffer();
+  const sseClients = new Set<string>();
+  const store = new SubscriptionStore(opts.subscriptionsPath ?? null);
+  await store.load();
+  const send = opts.vapid
+    ? async (sub: PushSubscription, payload: string): Promise<void> => {
+        const { sendNotification } = await import('web-push');
+        await sendNotification(sub as unknown as import('web-push').PushSubscription, payload, {
+          vapidDetails: { subject: opts.vapid!.subject, publicKey: opts.vapid!.publicKey, privateKey: opts.vapid!.privateKey },
+        });
+      }
+    : async (): Promise<void> => undefined; // push not configured — routes 503, sender is a no-op
+  attachPushSender(events, {
+    store,
+    send,
+    isForeground: (clientId) => sseClients.has(clientId),
+    log: (message) => app.log.info(`push: ${message}`),
+  });
+  registerPushRoutes(app, {
+    store,
+    publicKey: opts.vapid?.publicKey ?? null,
+    sendTest: () => sendTestPush(events),
+  });
 
   tunnel.attach(app); // registers GET /tunnel as the websocket route
 
@@ -38,12 +65,15 @@ export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInsta
 
   app.get('/api/events/stream', async (req, reply) => {
     startSseLike(reply.raw);
+    const clientId = (req.query as { clientId?: string }).clientId;
+    if (clientId) sseClients.add(clientId);
     for (const event of events.snapshot()) {
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
     }
     const unsubscribe = events.subscribe((event) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`));
     const keepalive = setInterval(() => reply.raw.write(': keepalive\n\n'), KEEPALIVE_MS);
     req.raw.on('close', () => {
+      if (clientId) sseClients.delete(clientId);
       unsubscribe();
       clearInterval(keepalive);
     });
