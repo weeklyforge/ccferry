@@ -10,6 +10,10 @@ Environment=CLOUD_PORT=8788
 Environment=CLOUD_TOKEN_PHONE=__PHONE_TOKEN__
 Environment=CCFERRY_TUNNEL_TOKEN=__TUNNEL_TOKEN__
 Environment=CLOUD_PWA_DIR=/opt/ccferry/pwa-dist
+Environment=VAPID_PUBLIC_KEY=__VAPID_PUBLIC__
+Environment=VAPID_PRIVATE_KEY=__VAPID_PRIVATE__
+Environment=VAPID_SUBJECT=mailto:ccferry@localhost
+Environment=CCFERRY_PUSH_SUBS=/var/lib/ccferry/push-subscriptions.json
 MemoryMax=512M
 Restart=always
 RestartSec=3
