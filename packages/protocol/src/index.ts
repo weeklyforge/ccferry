@@ -58,3 +58,4 @@ export interface VaultSearchMatch {
 export type StreamMessage =
   | { type: 'snapshot'; sessions: SessionSummary[] }
   | { type: 'append'; sessionId: string; lines: ParsedLine[] };
+
