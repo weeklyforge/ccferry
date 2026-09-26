@@ -1,11 +1,11 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { resolveInside } from './sandbox';
+import { resolveInsideReal } from './sandbox';
 
 export type ReadNoteResult = { status: 'ok'; content: string } | { status: 'escape' | 'missing' };
 
 export async function readNote(root: string, relPath: string): Promise<ReadNoteResult> {
-  const abs = resolveInside(root, relPath);
+  const abs = await resolveInsideReal(root, relPath);
   if (!abs) return { status: 'escape' };
   try {
     return { status: 'ok', content: await fs.readFile(abs, 'utf8') };
@@ -15,7 +15,7 @@ export async function readNote(root: string, relPath: string): Promise<ReadNoteR
 }
 
 export async function writeNote(root: string, relPath: string, content: string): Promise<'escape' | 'missing' | 'ok'> {
-  const abs = resolveInside(root, relPath);
+  const abs = await resolveInsideReal(root, relPath);
   if (!abs) return 'escape';
   try {
     await fs.access(abs);
@@ -27,7 +27,7 @@ export async function writeNote(root: string, relPath: string, content: string):
 }
 
 export async function createNote(root: string, relPath: string, content: string): Promise<'escape' | 'exists' | 'created'> {
-  const abs = resolveInside(root, relPath);
+  const abs = await resolveInsideReal(root, relPath);
   if (!abs) return 'escape';
   try {
     await fs.access(abs);
