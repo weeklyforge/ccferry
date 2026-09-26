@@ -3,10 +3,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ProjectSummary, SessionSummary } from '@ccferry/protocol';
-import { PushSource } from './push-source';
+import { PushSource, type ResultEvent } from './push-source';
 
 let dir: string;
-const events: Array<Record<string, unknown>> = [];
+const events: Array<ResultEvent> = [];
 
 beforeEach(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ccferry-push-'));
