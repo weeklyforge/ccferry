@@ -58,6 +58,6 @@ async function save(): Promise<void> {
 <style scoped>
 .editor { padding: 8px; }
 .path { font-size: 12px; color: #969799; padding: 4px 0; }
-.note-view { min-height: 200px; max-height: calc(100vh - 280px); overflow-y: auto; background: #fff; border: 1px solid #ebedf0; border-radius: 8px; padding: 12px; }
+.note-view { min-height: 200px; max-height: calc(100vh - 280px); overflow-y: auto; background: #fff; border: 1px solid var(--cc-border); border-radius: var(--cc-radius); padding: 12px; }
 .row { display: flex; gap: 8px; justify-content: flex-end; }
 </style>

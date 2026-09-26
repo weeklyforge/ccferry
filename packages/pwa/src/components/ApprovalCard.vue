@@ -31,9 +31,9 @@ function decide(decision: ApprovalDecision): void {
 </template>
 
 <style scoped>
-.approval-card { border: 1px solid #ee0a24; border-radius: 8px; padding: 8px; margin: 8px 0; }
+.approval-card { border: 1px solid #ee0a24; border-radius: var(--cc-radius); padding: 8px; margin: 8px 0; }
 .title { font-weight: bold; }
 .input { font-size: 12px; white-space: pre-wrap; word-break: break-all; max-height: 160px; overflow: auto; }
 .row { display: flex; gap: 8px; align-items: center; }
-.countdown { color: #ee0a24; font-size: 12px; margin-right: auto; }
+.countdown { color: var(--cc-danger); font-size: 12px; margin-right: auto; }
 </style>
