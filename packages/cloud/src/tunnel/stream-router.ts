@@ -2,12 +2,14 @@ import { Buffer } from 'node:buffer';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { FrameType, OPEN_KIND, encodeOpen, type Frame } from '@ccferry/protocol/src/frame';
 import type { TunnelServer } from './server';
+import { createOrderedWriter, type OrderedWriter } from './ordered-writer';
 
 interface PendingStream {
   req: FastifyRequest;
   reply: FastifyReply;
   headersSent: boolean;
   timer: NodeJS.Timeout;
+  writer: OrderedWriter;
 }
 
 export class StreamRouter {
@@ -43,7 +45,14 @@ export class StreamRouter {
       headers['content-type'] = headers['content-type'] ?? 'application/json';
     }
     const timer = setTimeout(() => this.fail(streamId), this.timeoutMs);
-    this.pending.set(streamId, { req, reply, headersSent: false, timer });
+    this.pending.set(streamId, {
+      req,
+      reply,
+      headersSent: false,
+      timer,
+      // Order-preserving write that honors socket backpressure (drain).
+      writer: createOrderedWriter(reply.raw),
+    });
     // The phone walked away mid-stream (response never finished): tell the
     // PC so it aborts the upstream fetch instead of running it to completion.
     reply.raw.on('close', () => {
@@ -107,17 +116,21 @@ export class StreamRouter {
         stream.reply.raw.writeHead(header.status, header.headers);
         return;
       }
-      stream.reply.raw.write(frame.payload); // SSE: each DATA frame flushes
+      stream.writer.write(frame.payload); // order kept, drain honored
       return;
     }
     clearTimeout(stream.timer);
     this.pending.delete(frame.streamId);
     const code = frame.payload.length >= 2 ? frame.payload.readUInt16BE(0) : 0;
-    if (code !== 0 && !stream.headersSent) {
-      stream.reply.raw.writeHead(502, { 'content-type': 'application/json' });
-      stream.reply.raw.end(JSON.stringify({ error: 'tunnel_stream_error' }));
-    } else {
-      stream.reply.raw.end();
-    }
+    // Wait for queued body writes to land before ending — CLOSE can arrive
+    // while the last DATA frame is still chained behind a drain.
+    void stream.writer.flush().then(() => {
+      if (code !== 0 && !stream.headersSent) {
+        stream.reply.raw.writeHead(502, { 'content-type': 'application/json' });
+        stream.reply.raw.end(JSON.stringify({ error: 'tunnel_stream_error' }));
+      } else {
+        stream.reply.raw.end();
+      }
+    });
   }
 }

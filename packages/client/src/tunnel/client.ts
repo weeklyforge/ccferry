@@ -11,6 +11,7 @@ import {
 } from '@ccferry/protocol/src/frame';
 import type { ApprovalBroker } from '../approval/broker';
 import { nextDelayMs } from './backoff';
+import { waitForBufferDrain } from './backpressure';
 
 const EVENT_STREAM_ID = 0x8000_0000;
 const CHUNK = 65_535;
@@ -231,6 +232,9 @@ export class TunnelClient {
           let chunk = Buffer.from(value);
           while (chunk.length > 0) {
             const piece = chunk.subarray(0, CHUNK);
+            // Backpressure v0: a slow server link must not buffer the whole
+            // response in the ws send queue (spec section 1).
+            if (this.socket) await waitForBufferDrain(this.socket);
             this.send(FrameType.Data, streamId, piece);
             chunk = chunk.subarray(CHUNK);
           }
