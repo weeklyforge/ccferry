@@ -53,6 +53,23 @@ describe('searchSessions', () => {
     expect(daysOnly.matches).toHaveLength(0);
   });
 
+  it('reports truncated when a large session was only tail-scanned', async () => {
+    // >4MB session with the needle in its HEAD: the per-file cap skips the
+    // head, so a miss must not be presented as a complete answer (spec D4).
+    const big = summary('big');
+    const filler = '{"type":"assistant"}' + 'x'.repeat(100) + '\n';
+    let content = 'early Smart Heating mention\n';
+    while (content.length < 4 * 1024 * 1024 + 1024) content += filler;
+    await fs.writeFile(big.file, content);
+    big.sizeBytes = (await fs.stat(big.file)).size;
+    const small = summary('small', { lastModifiedMs: Date.now() - 1000 });
+    await fs.writeFile(small.file, 'Smart Heating in small\n');
+    small.sizeBytes = (await fs.stat(small.file)).size;
+    const { matches, truncated } = await searchSessions([big, small], 'smart heating', {});
+    expect(matches.map((m) => m.sessionId)).toContain('small');
+    expect(truncated).toBe(true); // the big file's head was skipped
+  });
+
   it('stops at the byte cap and reports truncated', async () => {
     const ids = ['d1', 'd2', 'd3'];
     const sessions: SessionSummary[] = [];

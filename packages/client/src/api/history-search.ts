@@ -73,9 +73,9 @@ export async function searchSessions(
       continue; // vanished or unreadable file — skip
     }
     budget -= readLen;
-    if (readLen >= Math.min(s.sizeBytes, PER_FILE_CAP) && budget <= 0 && s !== pool.at(-1)) {
-      truncated = true;
-    }
+    // A skipped head (per-file cap or budget exhausted mid-file) means the
+    // answer is incomplete — never present a partial scan as full (spec D4).
+    if (from > 0) truncated = true;
     if (from > 0) {
       const firstNewline = text.indexOf('\n');
       if (firstNewline !== -1) text = text.slice(firstNewline + 1);

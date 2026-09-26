@@ -5,7 +5,7 @@ Evidence log for the M4 plan (history + web push + remote new task + polish).
 ## Build evidence
 
 - Custom service worker: `pnpm --filter @ccferry/pwa build` in injectManifest mode → `dist/sw.js` contains the push listener (`addEventListener` ×2, `showNotification` ×1). injectManifest contract: `srcDir` is the DIRECTORY, `filename` the SOURCE file name (`src` + `sw.ts`); `sw.ts` needs `/// <reference lib="webworker" />`.
-- Push sender/store/routes: 48/48 cloud tests green pre-deploy; full suite 175+ green across 4 packages at closeout.
+- Push sender/store/routes: 48/48 cloud tests green pre-deploy; full suite 199/199 green across 4 packages after the final-review fix pass (protocol 8 + cloud 48 + pwa 36 + client 107), typecheck 0 errors.
 - web-push npm installed on the host at `/opt/ccferry/cloud/node_modules/web-push`.
 
 ## Deployment (host 39.105.92.24)
@@ -26,6 +26,15 @@ Evidence log for the M4 plan (history + web push + remote new task + polish).
 - Tunnel: history search returns real session-store matches through 公网HTTPS → Caddy → WSS → daemon (`q=claude&days=30`).
 - Boundary: `POST /api/messages` with an unknown projectPath → `403 {"error":"unknown_project"}` both locally and through the tunnel; known/vault paths accepted (test-suite pinned).
 - Daemon restarted from the M4 worktree with tunnel authenticated (PushSource polling live).
+
+## Final review fix pass (Opus reviewer, 2026-09-27)
+
+Verdict "Yes — with fixes": 0 Critical / 3 Important / 8 Minor; all three executor rulings verified correct (the Task 2 split-line redesign in particular fixed a real plan flaw). Fixes landed under the standing fix-without-waiting authorization:
+
+- **I1 — history `truncated` never signaled per-file tail-capped scans**: a miss in the skipped head of a >4MB session was presented as "（无结果）" with no banner, violating D4's honesty contract. One-line fix (`if (from > 0) truncated = true`), pinned by a >4MB head-hit test.
+- **I2 — deploy.sh still masked remote install failures**: the `pnpm install | tail` pipeline runs under the remote shell, whose lack of pipefail makes the pipeline's status tail's (0) — the same incident class as this cycle's outage. Fixed with `set -o pipefail;` at the head of the remote command; semantics demonstrated (`{exit 1}|tail` → 0 without, 1 with).
+- **I3 — NewTask awaited the entire first agent turn**: screen lock / network blip mid-task showed "创建失败" while the task ran on. `lib/new-task-start.ts` now resolves on the FIRST streamed event (session started) and ignores post-start drops; success copy updated to "任务已在电脑上开始".
+- 8 Minors deferred to the ledger (suppression gap on SSE retry window, endpoint-keyed store cleanup + no unsubscribe button, unshared cachedScan double-scan, tunnel-down result events dropped, rotation corner, bare `/api` shell fallback, history/settings UX nits, weak half-buffer test).
 
 ## Owner acceptance checklist (phone side)
 

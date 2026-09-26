@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Button, Cell, CellGroup, Field, NavBar, Picker, Popup, showFailToast, showSuccessToast } from 'vant';
 import { ApiError, apiFetch, readSsePost } from '../lib/api';
+import { awaitStart } from '../lib/new-task-start';
 
 const router = useRouter();
 const text = ref('');
@@ -33,8 +34,14 @@ async function start(): Promise<void> {
   if (!project.value || !text.value.trim() || sending.value) return;
   sending.value = true;
   try {
-    await readSsePost('/api/messages', { projectPath: project.value, text: text.value.trim() }, () => undefined);
-    showSuccessToast('已创建，请在会话列表打开');
+    // Resolve on the FIRST streamed event: the POST streams the whole first
+    // agent turn, and waiting for it means a screen lock or network blip
+    // reports failure while the task actually runs on the PC.
+    await awaitStart(
+      (onEvent) => readSsePost('/api/messages', { projectPath: project.value, text: text.value.trim() }, onEvent),
+      () => undefined,
+    );
+    showSuccessToast('已创建，任务已在电脑上开始');
     void router.replace('/');
   } catch (error) {
     if (error instanceof ApiError && error.status === 403) showFailToast('该项目不在允许列表中');
