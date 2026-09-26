@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import type { SessionDriver } from '../driver/driver';
 import type { ApprovalBroker } from '../approval/broker';
 import { registerApprovalRoutes } from './approval-routes';
+import { searchSessions } from './history-search';
 import { registerNewSessionRoute } from './new-session-route';
 import { registerVaultRoutes } from './vault-routes';
 import { startSse } from './sse';
@@ -48,6 +49,17 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
   app.get('/api/projects', async () => driver.list().then((r) => ({ projects: r.projects })));
 
   app.get('/api/sessions', async () => (await driver.list()).sessions);
+
+  app.get('/api/history/search', async (req, reply) => {
+    const query = req.query as { q?: string; project?: string; days?: string; limit?: string };
+    if (!query.q?.trim()) return reply.code(400).send({ error: 'q required' });
+    const { sessions } = await driver.list();
+    return searchSessions(sessions, query.q, {
+      project: query.project,
+      days: query.days ? Number(query.days) : undefined,
+      limit: query.limit ? Number(query.limit) : undefined,
+    });
+  });
 
   app.get('/api/sessions/:id/stream', async (req, reply) => {
     const { id } = req.params as { id: string };
