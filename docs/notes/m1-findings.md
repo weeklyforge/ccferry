@@ -14,5 +14,5 @@ Evidence log for the M1 plan. One section per spike; fill during Tasks 2-4.
 
 ## Spike C: resume fork semantics
 
-- Result: (pending)
-- Evidence: (paste file listing before/after)
+- Result: resume appends in place — same session id, same JSONL file grew; no fork, no lineage tracking needed.
+- Evidence: `sid1: c40d7182-b2b9-47d2-aa5b-01bd38f07b8d` / `sid2: c40d7182-b2b9-47d2-aa5b-01bd38f07b8d` / `same id: true` / `GREW C:\Users\fetao\.claude\projects\C--Users-fetao-AppData-Local-Temp-ccferry-fork-7ovJSH\c40d7182-b2b9-47d2-aa5b-01bd38f07b8d.jsonl (+497363 bytes)` — exactly one file changed (the original session's), zero new files.
