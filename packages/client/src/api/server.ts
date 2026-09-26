@@ -55,13 +55,21 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
     if (!sessions.some((session) => session.sessionId === id)) {
       return reply.code(404).send({ error: 'session not found' });
     }
-    const query = req.query as { fromStart?: string };
+    const query = req.query as { fromStart?: string; tailBytes?: string };
+    const target = sessions.find((s) => s.sessionId === id);
     startSse(reply.raw);
     const controller = new AbortController();
     req.raw.on('close', () => controller.abort());
+    // tailBytes caps how much history the client pulls (phone-friendly);
+    // the driver skips any partial first line at the chosen offset.
+    let fromByte: number | undefined;
+    if (query.fromStart === 'true' && query.tailBytes && Number(query.tailBytes) > 0 && target) {
+      fromByte = Math.max(0, target.sizeBytes - Number(query.tailBytes));
+    }
     try {
       for await (const line of driver.streamSession(id, {
         fromStart: query.fromStart === 'true',
+        fromByte,
         signal: controller.signal,
       })) {
         reply.raw.write(`data: ${JSON.stringify(line)}\n\n`);

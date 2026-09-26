@@ -68,12 +68,13 @@ export class SdkDriver implements SessionDriver {
 
   async *streamSession(
     sessionId: string,
-    opts: { fromStart: boolean; signal: AbortSignal },
+    opts: { fromStart: boolean; signal: AbortSignal; fromByte?: number },
   ): AsyncGenerator<ParsedLine> {
     const file = await this.findSessionFile(sessionId);
     let lineNo = 0;
     for await (const raw of tailLines(file, {
       fromStart: opts.fromStart,
+      fromByte: opts.fromByte,
       signal: opts.signal,
       pollMs: 1000,
     })) {

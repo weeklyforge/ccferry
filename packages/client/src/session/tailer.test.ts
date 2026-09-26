@@ -57,6 +57,25 @@ describe('tailLines', () => {
     expect(await collectFirst(filePath, 1, true)).toEqual(['win-line']);
   });
 
+  it('starts at fromByte and skips the partial first line', async () => {
+    await fs.writeFile(filePath, 'line-1\nline-2\nline-3\n');
+    // 'line-1\nline-2\nline-3\n' is 21 bytes; offset 9 is mid-"line-2"
+    const controller = new AbortController();
+    const lines: string[] = [];
+    for await (const line of tailLines(filePath, {
+      pollMs: 10,
+      fromByte: 9,
+      signal: controller.signal,
+    })) {
+      lines.push(line);
+      if (lines.length >= 1) {
+        controller.abort();
+        break;
+      }
+    }
+    expect(lines).toEqual(['line-3']); // the partial "line-2" fragment dropped
+  });
+
   it('resets on truncation and keeps following (Review Focus 4)', async () => {
     await fs.writeFile(filePath, 'long first content that will be truncated away\n');
     const controller = new AbortController();

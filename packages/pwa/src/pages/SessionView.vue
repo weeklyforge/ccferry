@@ -68,9 +68,26 @@ async function send(force = false): Promise<void> {
   }
 }
 
-onMounted(() => {
-  stream = new EventSource(sseUrl(`/api/sessions/${sessionId}/stream?fromStart=true`));
+// Recent-history window: pulling a 20MB session from byte 0 floods the phone
+// and the tunnel; the last 256KB (~dozens of screens) is what a person reads.
+const TAIL_BYTES = 262_144;
+const fullHistory = ref(false);
+
+function connectStream(): void {
+  stream?.close();
+  bubbles.value = [];
+  const tail = fullHistory.value ? '' : `&tailBytes=${TAIL_BYTES}`;
+  stream = new EventSource(sseUrl(`/api/sessions/${sessionId}/stream?fromStart=true${tail}`));
   stream.onmessage = (event) => pushBubble(JSON.parse(event.data) as ParsedLine);
+}
+
+function loadFullHistory(): void {
+  fullHistory.value = true;
+  connectStream();
+}
+
+onMounted(() => {
+  connectStream();
   approvalsStream = new EventSource(sseUrl('/api/approvals/stream'));
   approvalsStream.onmessage = (event) => handleApprovalEvent(event.data);
 });
@@ -97,6 +114,7 @@ onUnmounted(() => {
       <div ref="bottom" />
     </div>
     <div class="composer">
+      <Button v-if="!fullHistory" size="small" plain @click="loadFullHistory">加载全部历史</Button>
       <Field v-model="input" placeholder="续聊…" rows="1" autosize />
       <Button type="primary" :loading="sending" @click="send">发送</Button>
     </div>

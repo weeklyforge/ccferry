@@ -4,6 +4,8 @@ export interface TailOptions {
   pollMs?: number;
   signal?: AbortSignal;
   fromStart?: boolean;
+  /** Explicit start offset (wins over fromStart); a partial first line is skipped. */
+  fromByte?: number;
 }
 
 const NEWLINE = 0x0a;
@@ -11,6 +13,11 @@ const NEWLINE = 0x0a;
 export async function* tailLines(filePath: string, opts: TailOptions = {}): AsyncGenerator<string> {
   const pollMs = opts.pollMs ?? 1000;
   let offset = opts.fromStart ? 0 : (await fs.stat(filePath)).size;
+  let skipPartialFirstLine = false;
+  if (typeof opts.fromByte === 'number' && opts.fromByte > 0) {
+    offset = opts.fromByte;
+    skipPartialFirstLine = true; // mid-line start: drop bytes before the first newline
+  }
   let carry: Buffer = Buffer.alloc(0);
   while (!opts.signal?.aborted) {
     let size: number;
@@ -27,7 +34,16 @@ export async function* tailLines(filePath: string, opts: TailOptions = {}): Asyn
     if (size > offset) {
       const stream = createReadStream(filePath, { start: offset });
       for await (const chunk of stream) {
-        const buf = chunk as Buffer;
+        let buf = chunk as Buffer;
+        if (skipPartialFirstLine) {
+          const firstNewline = buf.indexOf(NEWLINE);
+          if (firstNewline < 0) {
+            offset += buf.length; // still inside the partial line — skip it all
+            continue;
+          }
+          buf = buf.subarray(firstNewline + 1);
+          skipPartialFirstLine = false;
+        }
         carry = carry.length === 0 ? buf : Buffer.concat([carry, buf]);
         let idx = carry.indexOf(NEWLINE);
         while (idx >= 0) {
@@ -35,7 +51,7 @@ export async function* tailLines(filePath: string, opts: TailOptions = {}): Asyn
           carry = carry.subarray(idx + 1);
           idx = carry.indexOf(NEWLINE);
         }
-        offset += buf.length;
+        offset += (chunk as Buffer).length;
       }
     }
     await sleep(pollMs);
