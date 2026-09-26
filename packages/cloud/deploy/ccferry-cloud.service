@@ -3,11 +3,13 @@ Description=ccferry cloud tunnel server
 After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/npx tsx /opt/ccferry/cloud/src/main.ts
+# Node is managed by nvm for root; pin the resolved binary path.
+ExecStart=/root/.nvm/versions/node/v22.23.3/bin/tsx /opt/ccferry/cloud/src/main.ts
 WorkingDirectory=/opt/ccferry/cloud
 Environment=CLOUD_PORT=8788
 Environment=CLOUD_TOKEN_PHONE=__PHONE_TOKEN__
 Environment=CCFERRY_TUNNEL_TOKEN=__TUNNEL_TOKEN__
+Environment=CLOUD_PWA_DIR=/opt/ccferry/pwa-dist
 MemoryMax=512M
 Restart=always
 RestartSec=3
