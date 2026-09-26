@@ -2,7 +2,7 @@ import { type Dirent, promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { VaultNode } from '@ccferry/protocol';
 
-export const IGNORED_DIRS = new Set(['.git', '.obsidian', 'node_modules']);
+export const IGNORED_DIRS = new Set(['.git', '.obsidian', 'node_modules', '.trash']);
 
 export async function readTree(root: string): Promise<VaultNode[]> {
   return walk(root, '');

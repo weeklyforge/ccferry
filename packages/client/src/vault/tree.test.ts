@@ -21,6 +21,8 @@ describe('readTree', () => {
     await fs.writeFile(path.join(root, 'top.md'), 'x');
     await fs.mkdir(path.join(root, '.git'), { recursive: true });
     await fs.writeFile(path.join(root, '.git', 'config'), 'x');
+    await fs.mkdir(path.join(root, '.trash'), { recursive: true });
+    await fs.writeFile(path.join(root, '.trash', 'deleted.md'), 'x');
     const tree = await readTree(root);
     expect(tree.map((n) => n.path).sort()).toEqual(['top.md', '日报']);
     const dir = tree.find((n) => n.kind === 'dir');

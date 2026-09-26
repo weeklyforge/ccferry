@@ -48,6 +48,25 @@ describe('approval routes', () => {
     expect(res.statusCode).toBe(400);
   });
 
+  it('flushes the SSE headers immediately on connect even with no pending approvals', async () => {
+    const broker = new ApprovalBroker();
+    const instance = app(broker);
+    await instance.listen({ port: 0, host: '127.0.0.1' });
+    const address = instance.server.address() as { port: number };
+    const controller = new AbortController();
+    // With nothing pending the route writes no data for 15s (keepalive);
+    // fetch() must still resolve headers at once.
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/approvals/stream`, {
+      signal: controller.signal,
+    });
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    const { value } = await reader.read();
+    controller.abort();
+    expect(new TextDecoder().decode(value ?? new Uint8Array()).startsWith(':')).toBe(true);
+    await instance.close();
+  });
+
   it('stream redelivers the pending snapshot on reconnect (Review Focus 4)', async () => {
     const broker = new ApprovalBroker({ timeoutMs: 5000 });
     void broker.requestApproval({ sessionId: 's1', toolName: 'Bash', input: {} });

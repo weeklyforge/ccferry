@@ -9,6 +9,10 @@ export function registerApprovalRoutes(app: FastifyInstance, broker: ApprovalBro
 
   app.get('/api/approvals/stream', async (req, reply) => {
     startSse(reply.raw);
+    // Flush headers immediately: with no pending approvals the first real
+    // write would otherwise wait for the 15s keepalive, leaving EventSource
+    // hanging in CONNECTING on the phone.
+    reply.raw.write(': ccferry approvals stream open\n\n');
     for (const request of broker.listPending()) {
       reply.raw.write(`data: ${JSON.stringify(request)}\n\n`);
     }
