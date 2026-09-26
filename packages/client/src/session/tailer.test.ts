@@ -73,4 +73,21 @@ describe('tailLines', () => {
     }
     expect(lines).toEqual(['long first content that will be truncated away', 'new-epoch']);
   });
+
+  it('drops a pending partial line when the file is truncated (Review Focus 4)', async () => {
+    await fs.writeFile(filePath, 'line-1\n{"type":"user","partial":'); // last line unterminated
+    const controller = new AbortController();
+    const lines: string[] = [];
+    for await (const line of tailLines(filePath, { pollMs: 10, fromStart: true, signal: controller.signal })) {
+      lines.push(line);
+      if (lines.length === 1) {
+        await fs.writeFile(filePath, 'new-epoch\n'); // truncate + replace while carry holds the partial
+      }
+      if (lines.length >= 2) {
+        controller.abort();
+        break;
+      }
+    }
+    expect(lines).toEqual(['line-1', 'new-epoch']);
+  });
 });

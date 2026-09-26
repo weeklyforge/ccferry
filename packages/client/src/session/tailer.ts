@@ -20,7 +20,10 @@ export async function* tailLines(filePath: string, opts: TailOptions = {}): Asyn
       await sleep(pollMs); // file temporarily gone (rotation); wait for it
       continue;
     }
-    if (size < offset) offset = 0; // truncated or rotated: re-read from the start
+    if (size < offset) {
+      offset = 0; // truncated or rotated: re-read from the start
+      carry = Buffer.alloc(0); // a pending partial line belongs to the old epoch
+    }
     if (size > offset) {
       const stream = createReadStream(filePath, { start: offset });
       for await (const chunk of stream) {
