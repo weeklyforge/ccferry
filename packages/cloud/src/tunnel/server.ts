@@ -17,6 +17,7 @@ interface Peer {
 export class TunnelServer {
   private peer: Peer | null = null;
   private readonly frameHandlers = new Set<(frame: Frame) => void>();
+  private readonly peerDropHandlers = new Set<() => void>();
   private readonly failures = new Map<string, { count: number; windowStart: number }>();
   private readonly bans = new Map<string, number>();
 
@@ -75,6 +76,12 @@ export class TunnelServer {
     this.frameHandlers.add(cb);
   }
 
+  // Fired when THE authenticated peer goes away (drop, watchdog, kick): the
+  // router must fail its in-flight streams now, not at the idle timeout.
+  onPeerDrop(cb: () => void): void {
+    this.peerDropHandlers.add(cb);
+  }
+
   connectedPeerCount(): number {
     return this.peer?.authenticated ? 1 : 0;
   }
@@ -112,7 +119,9 @@ export class TunnelServer {
   }
 
   private dropPeer(peer: Peer): void {
-    if (this.peer === peer) this.peer = null;
+    if (this.peer !== peer) return;
+    this.peer = null;
+    for (const handler of this.peerDropHandlers) handler();
   }
 
   private recordFailure(ip: string): void {

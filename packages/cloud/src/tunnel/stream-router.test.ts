@@ -125,4 +125,38 @@ describe('StreamRouter (Review Focus 2, 3)', () => {
     const res = await app.inject({ method: 'GET', url: '/api/slow' });
     expect(res.statusCode).toBe(502);
   });
+
+  it('fails in-flight requests immediately when the tunnel drops', async () => {
+    let sawOpen: () => void = () => undefined;
+    const opened = new Promise<void>((resolve) => (sawOpen = resolve));
+    servePcResponse(() => sawOpen()); // PC takes the OPEN but never replies
+    const started = Date.now();
+    const resPromise = app.inject({ method: 'GET', url: '/api/slow' });
+    await opened;
+    pc.close(); // tunnel drops mid-request
+    const res = await resPromise;
+    expect(Date.now() - started).toBeLessThan(1500); // far below the 2000ms idle timeout
+    expect(res.statusCode).toBe(502);
+    expect(res.json()).toEqual({ error: 'tunnel_down' });
+  });
+
+  it('destroys in-flight streamed responses when the tunnel drops', async () => {
+    servePcResponse(({ streamId }, reply) => {
+      reply(encodeFrame(FrameType.Data, streamId, Buffer.from(JSON.stringify({ status: 200, headers: { 'content-type': 'text/event-stream' } }))));
+      reply(encodeFrame(FrameType.Data, streamId, Buffer.from('data: one\n\n')));
+    });
+    const controller = new AbortController();
+    const response = await fetch(`http://127.0.0.1:${port}/api/sse`, { signal: controller.signal });
+    const reader = response.body!.getReader();
+    await reader.read(); // headers + first chunk delivered — headersSent is true
+    const settled = reader.read().then(
+      () => undefined,
+      () => undefined, // clean end or stream error — both stop the hang
+    );
+    pc.close();
+    const started = Date.now();
+    await settled;
+    expect(Date.now() - started).toBeLessThan(1500); // not the 2000ms idle timeout
+    controller.abort();
+  });
 });

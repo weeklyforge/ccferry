@@ -24,6 +24,7 @@ export class StreamRouter {
   register(app: FastifyInstance): void {
     app.all('/api/*', async (req, reply) => this.handle(req, reply));
     this.optsRef.tunnel.onFrame((frame) => this.onTunnelFrame(frame));
+    this.optsRef.tunnel.onPeerDrop(() => this.failAllPending('tunnel_down'));
   }
 
   private async handle(req: FastifyRequest, reply: FastifyReply): Promise<void> {
@@ -66,13 +67,17 @@ export class StreamRouter {
     return id;
   }
 
-  private fail(streamId: number): void {
+  private failAllPending(error: string): void {
+    for (const streamId of [...this.pending.keys()]) this.fail(streamId, error);
+  }
+
+  private fail(streamId: number, error = 'tunnel_timeout'): void {
     const stream = this.pending.get(streamId);
     if (!stream) return;
     this.pending.delete(streamId);
     if (!stream.headersSent) {
       stream.reply.raw.writeHead(502, { 'content-type': 'application/json' });
-      stream.reply.raw.end(JSON.stringify({ error: 'tunnel_timeout' }));
+      stream.reply.raw.end(JSON.stringify({ error }));
     } else {
       stream.reply.raw.destroy();
     }
