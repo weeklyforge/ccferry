@@ -57,6 +57,7 @@ onUnmounted(() => {
   <Tabbar route placeholder>
     <TabbarItem replace to="/" icon="chat-o">会话</TabbarItem>
     <TabbarItem replace to="/history" icon="records">历史</TabbarItem>
+    <TabbarItem replace to="/new-task" icon="edit">新任务</TabbarItem>
     <TabbarItem replace to="/vault" icon="notes-o">知识库</TabbarItem>
     <TabbarItem replace to="/settings" icon="setting-o">设置</TabbarItem>
   </Tabbar>
