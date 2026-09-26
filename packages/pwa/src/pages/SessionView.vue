@@ -5,6 +5,7 @@ import { Button, Field, showConfirmDialog } from 'vant';
 import type { ApprovalSettledFrame, ParsedLine, ToolApprovalRequest } from '@ccferry/protocol';
 import { ApiError, readSsePost, sseUrl } from '../lib/api';
 import { renderMarkdown } from '../lib/markdown';
+import { followSse } from '../lib/sse-follow';
 import { useApprovalsStore } from '../stores/approvals';
 import { parsedLineToBubble } from '../lib/bubbles';
 import { postEventError } from '../lib/post-events';
@@ -17,7 +18,7 @@ const bubbles = ref<ReturnType<typeof parsedLineToBubble>[]>([]);
 const errors = ref<string[]>([]);
 const input = ref('');
 const sending = ref(false);
-let stream: EventSource | undefined;
+let stream: ReturnType<typeof followSse> | undefined;
 let approvalsStream: EventSource | undefined;
 const bottom = ref<HTMLElement | undefined>();
 
@@ -78,8 +79,15 @@ function connectStream(): void {
   stream?.close();
   bubbles.value = [];
   const tail = fullHistory.value ? '' : `&tailBytes=${TAIL_BYTES}`;
-  stream = new EventSource(sseUrl(`/api/sessions/${sessionId}/stream?fromStart=true${tail}`));
-  stream.onmessage = (event) => pushBubble(JSON.parse(event.data) as ParsedLine);
+  // followSse owns reconnection: a dropped tunnel must reset the view, not
+  // append a replayed copy of the tail the way EventSource auto-reconnect does.
+  stream = followSse(sseUrl(`/api/sessions/${sessionId}/stream?fromStart=true${tail}`), {
+    onLine: (data) => pushBubble(JSON.parse(data) as ParsedLine),
+    onReset: () => {
+      bubbles.value = [];
+      errors.value = [];
+    },
+  });
 }
 
 function loadFullHistory(): void {
