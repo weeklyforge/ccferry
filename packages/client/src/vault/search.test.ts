@@ -21,8 +21,12 @@ describe('createJsSearchEngine', () => {
     await fs.writeFile(path.join(root, 'b.md'), 'smart heating again\n');
     const engine = createJsSearchEngine();
     const matches = await engine.search(root, 'smart heating');
-    expect(matches).toHaveLength(2);
-    expect(matches[0]).toEqual({ path: 'notes/a.md', line: 2, text: 'Smart Heating here' });
+    expect(matches.map((m) => m.path).sort()).toEqual(['b.md', 'notes/a.md']);
+    expect(matches.find((m) => m.path === 'notes/a.md')).toEqual({
+      path: 'notes/a.md',
+      line: 2,
+      text: 'Smart Heating here',
+    });
   });
 
   it('returns an empty array for a blank query', async () => {
