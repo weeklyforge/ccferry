@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Button, Cell, CellGroup, Field, NavBar, Search, Toast } from 'vant';
+import { Button, Cell, CellGroup, Field, NavBar, Search, showFailToast } from 'vant';
 import type { VaultNode, VaultSearchMatch } from '@ccferry/protocol';
 import NoteEditor from '../components/NoteEditor.vue';
 import { apiFetch } from '../lib/api';
@@ -72,7 +72,7 @@ const runSearch = debounce(async (q: string) => {
 async function createNote(): Promise<void> {
   const path = newNotePath.value.trim();
   if (!path.endsWith('.md')) {
-    Toast.fail('路径必须以 .md 结尾');
+    showFailToast('路径必须以 .md 结尾');
     return;
   }
   const res = await apiFetch('/api/vault/file', { method: 'POST', body: JSON.stringify({ path, content: '' }) });
@@ -80,7 +80,7 @@ async function createNote(): Promise<void> {
     creating.value = false;
     editing.value = path;
   } else if (res.status === 409) {
-    Toast.fail('笔记已存在');
+    showFailToast('笔记已存在');
   }
 }
 

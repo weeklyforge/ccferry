@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Button, Cell, Collapse, CollapseItem, Dialog, PullRefresh, Tag } from 'vant';
+import { Button, Cell, Collapse, CollapseItem, PullRefresh, Tag, showConfirmDialog, showDialog } from 'vant';
 import type { SessionSummary, ToolApprovalRequest } from '@ccferry/protocol';
 import { apiFetch, readSsePost } from '../lib/api';
 import { useApprovalsStore } from '../stores/approvals';
@@ -45,7 +45,7 @@ function statusOf(s: SessionSummary): 'awaiting' | 'running' | 'idle' {
 async function startVaultSession(): Promise<void> {
   const treeRes = await apiFetch('/api/vault/tree');
   if (!treeRes.ok) {
-    Dialog.alert({ message: '知识库未配置（daemon 端 ~/.ccferry/config.json 缺 vaultPath）' });
+    void showDialog({ message: '知识库未配置（daemon 端 ~/.ccferry/config.json 缺 vaultPath）' });
     return;
   }
   const vaultRoot = (await treeRes.json())['root'] as string;
@@ -54,8 +54,14 @@ async function startVaultSession(): Promise<void> {
   } catch {
     // errors surface in the session stream itself; ignore here
   }
-  Dialog.alert({ message: '已创建 vault 会话，请在会话列表打开' });
+  void showDialog({ message: '已创建 vault 会话，请在会话列表打开' });
   await refresh();
+}
+
+function confirmAgent(): void {
+  void showConfirmDialog({ message: '向知识库发一条整理指令？' })
+    .then(startVaultSession)
+    .catch(() => undefined); // cancel rejects
 }
 
 function relative(ms: number): string {
@@ -75,10 +81,7 @@ onUnmounted(() => poll && clearInterval(poll));
   <div class="page">
     <div class="header">
       <h2>会话总览</h2>
-      <Button
-        size="small"
-        @click="Dialog.confirm({ message: '向知识库发一条整理指令？' }).then(startVaultSession)"
-      >agent 整理</Button>
+      <Button size="small" @click="confirmAgent">agent 整理</Button>
     </div>
     <PullRefresh :model-value="false" @update:model-value="refresh">
       <Collapse v-model="openGroups">

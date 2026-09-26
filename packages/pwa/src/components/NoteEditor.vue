@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { Button, Field, Toast } from 'vant';
+import { Button, Field, showFailToast, showSuccessToast } from 'vant';
 import { apiFetch } from '../lib/api';
 
 const props = defineProps<{ path: string }>();
@@ -11,7 +11,7 @@ const saving = ref(false);
 onMounted(async () => {
   const res = await apiFetch(`/api/vault/file?path=${encodeURIComponent(props.path)}`);
   if (res.ok) content.value = (await res.json())['content'] as string;
-  else Toast.fail('读取失败');
+  else showFailToast('读取失败');
 });
 
 async function save(): Promise<void> {
@@ -21,8 +21,8 @@ async function save(): Promise<void> {
       method: 'PUT',
       body: JSON.stringify({ path: props.path, content: content.value }),
     });
-    if (res.ok) Toast.success('已保存（obsidian-git 兜底留痕）');
-    else Toast.fail('保存失败');
+    if (res.ok) showSuccessToast('已保存（obsidian-git 兜底留痕）');
+    else showFailToast('保存失败');
   } finally {
     saving.value = false;
   }
