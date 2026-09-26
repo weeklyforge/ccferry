@@ -32,3 +32,22 @@ Evidence log for the M3 plan.
 
 - After 5+ minutes fully idle, `/api/approvals?token=…` through the tunnel returned `200` — the 30s PING / 60s watchdog held the connection with no reconnect. Verdict: **PASS, default intervals stand**.
 
+## Acceptance (Task 12, owner-confirmed 2026-09-26)
+
+- [x] 4G phone opens `https://39.105.92.24.nip.io/`, phone token saved
+- [x] overview shows real projects/sessions through the tunnel
+- [x] session view streams (now capped to a 256KB recent window, full history on button)
+- [x] 续聊 works (after the request-body fix below); `/compact` passthrough verified for heavy sessions ("Not enough messages to compact." on a fresh session proves the command executes)
+- [x] approval card pops and allow/deny works over the tunnel
+- [x] vault browse/edit/search through the tunnel
+- [x] disconnect recovery: daemon killed → immediate 502 `tunnel_down` (no hang) → restart → tunnel re-authenticated, API restored (exercised twice; note: stopping the shell leaves a node orphan on Windows — kill by port)
+- [x] wrong phone token → 401
+- [x] add to home screen
+
+## Fix-forwards during acceptance
+
+1. **Request bodies never crossed the tunnel** (`FST_ERR_CTP_EMPTY_JSON_BODY` on phone sends) — bridgeHttp passed no body and the protocol had no end-of-request marker; OPEN meta gained `bodyBytes`, the PC buffers body frames then fetches. Pinned by POST-echo test.
+2. **`tunnel_timeout` on slow resumes** — fixed 30s request timeout killed resumed sessions whose first byte exceeds it; timeout now resets on every DATA frame (idle semantics).
+3. **Session view loaded the whole file** (owner: "为什么这么多?") — tailer gained `fromByte` with partial-line skipping, stream route accepts `tailBytes`, PWA defaults to a 256KB recent window with a load-full-history button.
+
+
