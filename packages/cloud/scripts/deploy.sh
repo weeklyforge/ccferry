@@ -11,7 +11,7 @@ pnpm --filter @ccferry/cloud exec tsc --noEmit
 ssh "$HOST" "mkdir -p /opt/ccferry/cloud /opt/ccferry/protocol /opt/ccferry/pwa-dist"
 scp -r packages/cloud/src "$HOST:/opt/ccferry/cloud/"
 scp packages/cloud/package.json packages/cloud/tsconfig.json "$HOST:/opt/ccferry/cloud/"
-scp packages/protocol/src "$HOST:/opt/ccferry/protocol/"
+scp -r packages/protocol/src "$HOST:/opt/ccferry/protocol/"
 scp packages/protocol/package.json packages/protocol/tsconfig.json "$HOST:/opt/ccferry/protocol/"
 scp pnpm-workspace.yaml pnpm-lock.yaml "$HOST:/opt/ccferry/"
 scp -r packages/pwa/dist/* "$HOST:/opt/ccferry/pwa-dist/"
