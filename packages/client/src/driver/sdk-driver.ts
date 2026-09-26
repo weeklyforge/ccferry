@@ -2,8 +2,17 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { DriverEvent, ParsedLine, ProjectSummary, SessionSummary } from '@ccferry/protocol';
 import { parseLine } from '../session/parse';
 import { scanStore } from '../session/scanner';
+import type { ScanFn } from '../session/scan-cache';
 import { tailLines } from '../session/tailer';
+import type { ApprovalBroker, PermissionResult } from '../approval/broker';
+import { DEFAULT_TOOL_WHITELIST, evaluateToolPolicy } from '../approval/policy';
 import type { SessionDriver, SendMessageInput } from './driver';
+
+export interface SdkDriverOptions {
+  broker?: ApprovalBroker;
+  whitelist?: readonly string[];
+  scan?: ScanFn;
+}
 
 interface SdkMessage {
   type?: string;
@@ -37,17 +46,39 @@ export function mapSdkMessages(messages: SdkMessage[]): DriverEvent[] {
   return events;
 }
 
-async function denyAllTools(): Promise<{ behavior: 'deny'; message: string }> {
-  // M1 safety default: the daemon never lets the model act unattended.
-  // M2 replaces this with remote approval routing.
-  return { behavior: 'deny', message: 'Tool use requires remote approval, which arrives in milestone M2.' };
-}
-
 export class SdkDriver implements SessionDriver {
-  constructor(private readonly claudeDir: string) {}
+  private readonly whitelist: readonly string[];
+  private readonly scan: ScanFn;
+  private currentSessionId: string | null = null;
+
+  constructor(
+    private readonly claudeDir: string,
+    private readonly options: SdkDriverOptions = {},
+  ) {
+    this.whitelist = options.whitelist ?? DEFAULT_TOOL_WHITELIST;
+    this.scan = options.scan ?? scanStore;
+  }
+
+  private readonly canUseTool = async (
+    toolName: string,
+    input: Record<string, unknown>,
+  ): Promise<PermissionResult> => {
+    if (evaluateToolPolicy(toolName, this.whitelist) === 'allow') {
+      return { behavior: 'allow' };
+    }
+    if (!this.options.broker) {
+      // No broker configured (unit contexts): stay fail-closed like M1.
+      return { behavior: 'deny', message: 'Tool use requires remote approval; no approval broker is configured.' };
+    }
+    return this.options.broker.requestApproval({
+      sessionId: this.currentSessionId,
+      toolName,
+      input,
+    });
+  };
 
   async list(): Promise<{ projects: ProjectSummary[]; sessions: SessionSummary[] }> {
-    return scanStore(this.claudeDir);
+    return this.scan(this.claudeDir);
   }
 
   async *streamSession(
@@ -67,15 +98,18 @@ export class SdkDriver implements SessionDriver {
   }
 
   async *sendMessage(input: SendMessageInput): AsyncGenerator<DriverEvent> {
+    this.currentSessionId = input.sessionId;
     for await (const message of query({
       prompt: input.text,
       options: {
         resume: input.sessionId ?? undefined,
         cwd: input.projectPath,
-        canUseTool: denyAllTools,
+        canUseTool: this.canUseTool,
       },
     })) {
-      const [event] = mapSdkMessages([message as SdkMessage]);
+      const msg = message as SdkMessage & { session_id?: string };
+      if (msg.session_id) this.currentSessionId = msg.session_id;
+      const [event] = mapSdkMessages([msg]);
       if (event) yield event;
     }
   }
