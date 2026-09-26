@@ -52,6 +52,14 @@ if (tunnelUrl && tunnelToken) {
     log: (message) => console.log(`ccferry-tunnel: ${message}`),
   });
   tunnel.start();
+  const { PushSource } = await import('./watcher/push-source');
+  const pushSource = new PushSource({
+    claudeDir,
+    scan: cachedScan(claudeDir, 5000),
+    onEvent: (event) => tunnel.eventSend(event as unknown as Record<string, unknown>),
+    log: (message) => console.log(`ccferry-push: ${message}`),
+  });
+  pushSource.start();
 } else if (tunnelUrl || tunnelToken) {
   console.warn('ccferry: CCFERRY_TUNNEL_URL and CCFERRY_TUNNEL_TOKEN must be set together — tunnel disabled');
 }
