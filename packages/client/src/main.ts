@@ -6,7 +6,7 @@ import { buildServer } from './api/server';
 const port = Number(process.env['CCFERRY_PORT'] ?? 8787);
 const claudeDir = path.join(os.homedir(), '.claude');
 
-const app = buildServer(new SdkDriver(claudeDir));
+const app = buildServer(new SdkDriver(claudeDir), true);
 app
   .listen({ port, host: '127.0.0.1' })
   .then(() => console.log(`ccferry daemon listening on http://127.0.0.1:${port}`))

@@ -5,8 +5,8 @@ import type { SessionDriver } from '../driver/driver';
 
 const ACTIVE_WINDOW_MS = 120_000;
 
-export function buildServer(driver: SessionDriver): FastifyInstance {
-  const app = Fastify();
+export function buildServer(driver: SessionDriver, logger = false): FastifyInstance {
+  const app = Fastify({ logger });
 
   app.get('/api/projects', async () => driver.list().then((r) => ({ projects: r.projects })));
 
@@ -14,6 +14,10 @@ export function buildServer(driver: SessionDriver): FastifyInstance {
 
   app.get('/api/sessions/:id/stream', async (req, reply) => {
     const { id } = req.params as { id: string };
+    const { sessions } = await driver.list();
+    if (!sessions.some((session) => session.sessionId === id)) {
+      return reply.code(404).send({ error: 'session not found' });
+    }
     const query = req.query as { fromStart?: string };
     startSse(reply.raw);
     const controller = new AbortController();
@@ -25,6 +29,9 @@ export function buildServer(driver: SessionDriver): FastifyInstance {
       })) {
         reply.raw.write(`data: ${JSON.stringify(line)}\n\n`);
       }
+    } catch (error) {
+      req.log.error({ err: error, sessionId: id }, 'session stream failed');
+      reply.raw.write(`: ccferry error: ${errorMessage(error)}\n\n`);
     } finally {
       reply.raw.end();
     }
@@ -49,6 +56,9 @@ export function buildServer(driver: SessionDriver): FastifyInstance {
       })) {
         reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
       }
+    } catch (error) {
+      req.log.error({ err: error, sessionId: id }, 'send message failed');
+      reply.raw.write(`: ccferry error: ${errorMessage(error)}\n\n`);
     } finally {
       reply.raw.end();
     }
@@ -63,4 +73,8 @@ function startSse(raw: ServerResponse): void {
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
   });
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

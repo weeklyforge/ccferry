@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import type { SessionSummary } from '@ccferry/protocol';
+import type { ParsedLine, SessionSummary } from '@ccferry/protocol';
 import { FakeDriver } from '../driver/fake-driver';
 import { buildServer } from './server';
 
 const NOW = Date.now();
+
+class ThrowingStreamDriver extends FakeDriver {
+  async *streamSession(): AsyncGenerator<ParsedLine> {
+    yield { ok: true, line: 1, json: { type: 'user' } };
+    throw new Error('stream boom');
+  }
+}
+
+class ThrowingSendDriver extends FakeDriver {
+  async *sendMessage(): AsyncGenerator<never> {
+    throw new Error('send boom');
+  }
+}
 
 function session(overrides: Partial<SessionSummary> = {}): SessionSummary {
   return {
@@ -34,12 +47,40 @@ describe('api server', () => {
 
   it('GET /api/sessions/:id/stream emits SSE data lines', async () => {
     const app = buildServer(
-      new FakeDriver([], [], [{ ok: true, line: 1, json: { type: 'user' } }]),
+      new FakeDriver([], [session()], [{ ok: true, line: 1, json: { type: 'user' } }]),
     );
-    const res = await app.inject({ method: 'GET', url: '/api/sessions/sid-1/stream?fromStart=true' });
+    const res = await app.inject({ method: 'GET', url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/stream?fromStart=true' });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
     expect(res.body).toContain('data: {"ok":true,"line":1,"json":{"type":"user"}}');
+  });
+
+  it('GET /api/sessions/:id/stream returns 404 for unknown sessions', async () => {
+    const app = buildServer(new FakeDriver([], [], [{ ok: true, line: 1, json: {} }]));
+    const res = await app.inject({ method: 'GET', url: '/api/sessions/does-not-exist/stream' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ error: 'session not found' });
+  });
+
+  it('GET /api/sessions/:id/stream surfaces a mid-stream driver error as an SSE comment', async () => {
+    const app = buildServer(new ThrowingStreamDriver([], [session()]));
+    const res = await app.inject({ method: 'GET', url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/stream?fromStart=true' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.body).toContain('data: {"ok":true,"line":1,"json":{"type":"user"}}');
+    expect(res.body).toContain(': ccferry error: stream boom');
+  });
+
+  it('POST messages surfaces a mid-stream driver error as an SSE comment', async () => {
+    const app = buildServer(new ThrowingSendDriver([], [session()]));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/messages',
+      payload: { text: 'hi' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toContain('text/event-stream');
+    expect(res.body).toContain(': ccferry error: send boom');
   });
 
   it('POST messages returns 409 session_active for a recently modified session (Review Focus 3)', async () => {
