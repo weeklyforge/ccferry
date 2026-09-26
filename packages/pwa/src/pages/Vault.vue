@@ -5,6 +5,7 @@ import { Button, Cell, CellGroup, Field, NavBar, Search, showFailToast } from 'v
 import type { VaultNode, VaultSearchMatch } from '@ccferry/protocol';
 import NoteEditor from '../components/NoteEditor.vue';
 import { apiFetch } from '../lib/api';
+import { highlightSegments } from '../lib/highlight';
 import { debounce } from '../lib/debounce';
 
 const router = useRouter();
@@ -108,10 +109,16 @@ onMounted(() => void openRoot());
         v-for="match in matches"
         :key="match.path + match.line"
         :title="match.path"
-        :label="`${match.line}: ${match.text}`"
         is-link
         @click="openMatch(match)"
-      />
+      >
+        <!-- Segments (not v-html) keep arbitrary note text unescaped-safe. -->
+        <template #label>
+          <span class="match-line">{{ match.line }}:
+            <template v-for="(seg, i) in highlightSegments(match.text, query)" :key="i"><mark v-if="seg.hit">{{ seg.text }}</mark><template v-else>{{ seg.text }}</template></template>
+          </span>
+        </template>
+      </Cell>
       <Cell v-if="matches.length === 0" title="（无结果）" />
     </CellGroup>
     <CellGroup v-else>

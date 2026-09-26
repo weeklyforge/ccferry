@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router';
 import { Button, Field, showConfirmDialog } from 'vant';
 import type { ApprovalSettledFrame, ParsedLine, ToolApprovalRequest } from '@ccferry/protocol';
 import { ApiError, readSsePost, sseUrl } from '../lib/api';
+import { renderMarkdown } from '../lib/markdown';
 import { useApprovalsStore } from '../stores/approvals';
 import { parsedLineToBubble } from '../lib/bubbles';
 import { postEventError } from '../lib/post-events';
@@ -101,7 +102,11 @@ onUnmounted(() => {
   <div class="page session">
     <div class="stream">
       <div v-for="(bubble, i) in bubbles" :key="i" :class="['bubble', bubble?.kind === 'text' ? bubble.role : bubble?.kind]">
-        <template v-if="bubble?.kind === 'text'">{{ bubble.text }}</template>
+        <!-- Assistant replies are markdown-heavy; render them. User input is
+             conversational text and slash commands — keep it plain so it is
+             never misparsed. -->
+        <div v-if="bubble?.kind === 'text' && bubble.role === 'assistant'" class="md-body" v-html="renderMarkdown(bubble.text)"></div>
+        <template v-else-if="bubble?.kind === 'text'">{{ bubble.text }}</template>
         <template v-else-if="bubble?.kind === 'tool'">🔧 {{ bubble.name }}</template>
         <template v-else-if="bubble?.kind === 'raw'">{{ bubble.text }}</template>
       </div>
