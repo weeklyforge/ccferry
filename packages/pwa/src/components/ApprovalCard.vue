@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { Button } from 'vant';
-import type { ToolApprovalRequest } from '@ccferry/protocol';
+import { Button, showFailToast } from 'vant';
+import type { ApprovalDecision, ToolApprovalRequest } from '@ccferry/protocol';
 import { useApprovalsStore } from '../stores/approvals';
 import { useCountdown } from '../composables/useCountdown';
 
@@ -10,6 +10,12 @@ const approvals = useApprovalsStore();
 const { remaining } = useCountdown(props.request.createdAtMs + props.request.timeoutMs);
 const seconds = computed(() => Math.ceil(remaining.value / 1000));
 const inputPreview = computed(() => JSON.stringify(props.request.input).slice(0, 600));
+
+function decide(decision: ApprovalDecision): void {
+  void approvals.decide(props.request.approvalId, decision).catch(() => {
+    showFailToast('决断未送达，请重试');
+  });
+}
 </script>
 
 <template>
@@ -18,8 +24,8 @@ const inputPreview = computed(() => JSON.stringify(props.request.input).slice(0,
     <pre class="input">{{ inputPreview }}</pre>
     <div class="row">
       <span class="countdown">{{ seconds }}s 后自动拒绝</span>
-      <Button size="small" type="danger" plain @click="approvals.decide(request.approvalId, 'deny')">拒绝</Button>
-      <Button size="small" type="primary" @click="approvals.decide(request.approvalId, 'allow')">允许</Button>
+      <Button size="small" type="danger" plain @click="decide('deny')">拒绝</Button>
+      <Button size="small" type="primary" @click="decide('allow')">允许</Button>
     </div>
   </div>
 </template>

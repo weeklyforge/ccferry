@@ -17,6 +17,16 @@ function request(id: string, ageMs = 0): ToolApprovalRequest {
 describe('approvals store', () => {
   beforeEach(() => setActivePinia(createPinia()));
 
+  it('keeps the card and rejects when the decision POST fails', async () => {
+    const store = useApprovalsStore();
+    store.ingest(request('a2'));
+    const fetchMock = vi.fn().mockRejectedValue(new Error('network down'));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(store.decide('a2', 'allow')).rejects.toThrow('network down');
+    expect(store.pending.map((p) => p.approvalId)).toContain('a2'); // card restored/kept, not silently dropped
+    vi.unstubAllGlobals();
+  });
+
   it('ingests without duplicating and decide removes + posts', async () => {
     const store = useApprovalsStore();
     store.ingest(request('a1'));

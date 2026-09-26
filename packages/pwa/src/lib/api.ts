@@ -1,5 +1,15 @@
 import { useAuthStore } from '../stores/auth';
 
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: Record<string, unknown>,
+  ) {
+    super(`HTTP ${status}`);
+    this.name = 'ApiError';
+  }
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const auth = useAuthStore();
   const headers = new Headers(init.headers);
@@ -25,7 +35,16 @@ export async function readSsePost(path: string, body: unknown, onEvent: (data: s
     headers,
     body: JSON.stringify(body),
   });
-  if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) {
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = (await response.json()) as Record<string, unknown>;
+    } catch {
+      // non-JSON error body — keep the empty object
+    }
+    throw new ApiError(response.status, parsed);
+  }
+  if (!response.body) throw new ApiError(response.status, {});
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';

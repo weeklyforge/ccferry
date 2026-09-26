@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
-import { Button, Field } from 'vant';
-import type { DriverEvent, ParsedLine, ToolApprovalRequest } from '@ccferry/protocol';
-import { readSsePost, sseUrl } from '../lib/api';
+import { Button, Field, showConfirmDialog } from 'vant';
+import type { ParsedLine, ToolApprovalRequest } from '@ccferry/protocol';
+import { ApiError, readSsePost, sseUrl } from '../lib/api';
 import { useApprovalsStore } from '../stores/approvals';
 import { parsedLineToBubble } from '../lib/bubbles';
+import { postEventError } from '../lib/post-events';
 import ApprovalCard from '../components/ApprovalCard.vue';
 
 const route = useRoute();
@@ -33,20 +34,30 @@ function handleApprovalEvent(data: string): void {
   }
 }
 
-async function send(): Promise<void> {
+// The tailed JSONL stream owns bubble rendering (user + assistant), so the
+// POST response is only consulted for errors — rendering both would duplicate
+// every bubble. The user bubble comes from the tail when the SDK writes it.
+async function send(force = false): Promise<void> {
   const text = input.value.trim();
   if (!text || sending.value) return;
   sending.value = true;
-  input.value = '';
-  bubbles.value.push({ kind: 'text', role: 'user', text });
+  if (!force) input.value = '';
   try {
-    await readSsePost(`/api/sessions/${sessionId}/messages`, { text, force: false }, (data) => {
-      const event = JSON.parse(data) as DriverEvent;
-      if (event.type === 'error') errors.value.push(event.message);
-      else if (event.type === 'assistant') bubbles.value.push({ kind: 'text', role: 'assistant', text: event.text });
+    await readSsePost(`/api/sessions/${sessionId}/messages`, { text, force }, (data) => {
+      const message = postEventError(JSON.parse(data) as Parameters<typeof postEventError>[0]);
+      if (message) errors.value.push(message);
     });
   } catch (error) {
-    errors.value.push(String(error));
+    if (error instanceof ApiError && error.status === 409 && error.body['error'] === 'session_active') {
+      try {
+        await showConfirmDialog({ message: '会话近期仍有写入（可能本地 TUI 正在跑）。强制续聊？' });
+        await send(true);
+      } catch {
+        // user declined the force resend
+      }
+    } else {
+      errors.value.push(error instanceof Error ? error.message : String(error));
+    }
   } finally {
     sending.value = false;
   }

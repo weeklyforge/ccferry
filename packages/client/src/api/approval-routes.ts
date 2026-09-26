@@ -33,7 +33,10 @@ export function registerApprovalRoutes(app: FastifyInstance, broker: ApprovalBro
       return reply.code(400).send({ error: 'decision must be allow or deny' });
     }
     const outcome = broker.decide(id, body.decision);
-    if (outcome === 'applied') return { ok: true };
+    if (outcome === 'applied') {
+      req.log.info({ approvalId: id, decision: body.decision }, 'approval decision');
+      return { ok: true };
+    }
     if (outcome === 'already') return reply.code(409).send({ error: 'already_decided' });
     return reply.code(404).send({ error: 'unknown approval' });
   });

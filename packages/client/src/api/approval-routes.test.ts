@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApprovalBroker } from '../approval/broker';
 import { registerApprovalRoutes } from './approval-routes';
 
@@ -46,6 +46,22 @@ describe('approval routes', () => {
       payload: { decision: 'maybe' },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('logs the applied decision for the audit trail (spec 5.6)', async () => {
+    const broker = new ApprovalBroker({ timeoutMs: 5000 });
+    void broker.requestApproval({ sessionId: null, toolName: 'Bash', input: {} });
+    const [pending] = broker.listPending();
+    const instance = app(broker);
+    const infoSpy = vi.spyOn(instance.log, 'info');
+    await instance.inject({
+      method: 'POST',
+      url: `/api/approvals/${pending!.approvalId}/decision`,
+      payload: { decision: 'allow' },
+    });
+    const auditCall = infoSpy.mock.calls.find(([, msg]) => msg === 'approval decision');
+    expect(auditCall?.[0]).toMatchObject({ approvalId: pending!.approvalId, decision: 'allow' });
+    broker.decide(pending!.approvalId, 'deny'); // settle for clean exit
   });
 
   it('flushes the SSE headers immediately on connect even with no pending approvals', async () => {

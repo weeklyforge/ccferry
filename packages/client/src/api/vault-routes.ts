@@ -37,6 +37,7 @@ export function registerVaultRoutes(app: FastifyInstance, vaultRoot: string | nu
     const outcome = await writeNote(root, body.path, body.content);
     if (outcome === 'escape') return reply.code(400).send({ error: 'path_escape' });
     if (outcome === 'missing') return reply.code(404).send({ error: 'note not found' });
+    req.log.info({ path: body.path }, 'vault note written');
     return { ok: true };
   });
 
@@ -49,6 +50,7 @@ export function registerVaultRoutes(app: FastifyInstance, vaultRoot: string | nu
     const outcome = await createNote(root, body.path, body.content ?? '');
     if (outcome === 'escape') return reply.code(400).send({ error: 'path_escape' });
     if (outcome === 'exists') return reply.code(409).send({ error: 'note exists' });
+    req.log.info({ path: body.path }, 'vault note created');
     return reply.code(201).send({ ok: true });
   });
 

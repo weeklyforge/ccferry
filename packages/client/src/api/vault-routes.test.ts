@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerVaultRoutes } from './vault-routes';
 
 let root: string;
@@ -59,6 +59,17 @@ describe('vault routes', () => {
     expect(hit.json()).toEqual({ matches: [{ path: 'a.md', line: 1, text: 'smart heating' }] });
     const blank = await app.inject({ method: 'GET', url: '/api/vault/search?q=' });
     expect(blank.statusCode).toBe(400);
+  });
+
+  it('logs note writes for the audit trail (spec 5.6)', async () => {
+    await fs.writeFile(path.join(root, 'audit.md'), 'seed');
+    const infoSpy = vi.spyOn(app.log, 'info');
+    await app.inject({ method: 'PUT', url: '/api/vault/file', payload: { path: 'audit.md', content: 'x' } });
+    await app.inject({ method: 'POST', url: '/api/vault/file', payload: { path: 'audit-new.md', content: 'x' } });
+    const writeCall = infoSpy.mock.calls.find(([, msg]) => msg === 'vault note written');
+    const createCall = infoSpy.mock.calls.find(([, msg]) => msg === 'vault note created');
+    expect(writeCall?.[0]).toMatchObject({ path: 'audit.md' });
+    expect(createCall?.[0]).toMatchObject({ path: 'audit-new.md' });
   });
 
   it('answers 503 when the vault is not configured', async () => {

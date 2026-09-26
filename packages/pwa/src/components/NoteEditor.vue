@@ -7,11 +7,18 @@ const props = defineProps<{ path: string }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
 const content = ref('');
 const saving = ref(false);
+// A failed load leaves content empty; saving then would overwrite the note
+// with nothing. Keep Save disabled until real content has been read.
+const loadFailed = ref(true);
 
 onMounted(async () => {
   const res = await apiFetch(`/api/vault/file?path=${encodeURIComponent(props.path)}`);
-  if (res.ok) content.value = (await res.json())['content'] as string;
-  else showFailToast('读取失败');
+  if (res.ok) {
+    content.value = (await res.json())['content'] as string;
+    loadFailed.value = false;
+  } else {
+    showFailToast('读取失败，已禁用保存以防覆盖');
+  }
 });
 
 async function save(): Promise<void> {
@@ -35,7 +42,7 @@ async function save(): Promise<void> {
     <Field v-model="content" type="textarea" rows="16" autosize />
     <div class="row">
       <Button plain @click="emit('close')">关闭</Button>
-      <Button type="primary" :loading="saving" @click="save">保存</Button>
+      <Button type="primary" :loading="saving" :disabled="loadFailed" @click="save">保存</Button>
     </div>
   </div>
 </template>
