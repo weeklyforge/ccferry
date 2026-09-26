@@ -40,7 +40,10 @@ async function enablePush(): Promise<void> {
       return;
     }
     const registration = await navigator.serviceWorker.ready;
-    const sub = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+    const sub = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+    });
     const json = sub.toJSON() as { endpoint?: string; keys?: { p256dh?: string; auth?: string } };
     const res = await apiFetch('/api/push/subscribe', {
       method: 'POST',
