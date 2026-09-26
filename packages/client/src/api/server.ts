@@ -5,8 +5,20 @@ import type { SessionDriver } from '../driver/driver';
 
 const ACTIVE_WINDOW_MS = 120_000;
 
+// The daemon binds to 127.0.0.1; also demand a loopback Host header so a
+// visited website cannot reach it through DNS rebinding (which would make
+// the request same-origin and skip the browser's CSRF preflight).
+const ALLOWED_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '::1']);
+
 export function buildServer(driver: SessionDriver, logger = false): FastifyInstance {
   const app = Fastify({ logger });
+
+  app.addHook('onRequest', async (req, reply) => {
+    const hostname = req.hostname.replace(/^\[|\]$/g, '');
+    if (!ALLOWED_HOSTNAMES.has(hostname)) {
+      return reply.code(403).send({ error: 'host not allowed' });
+    }
+  });
 
   app.get('/api/projects', async () => driver.list().then((r) => ({ projects: r.projects })));
 

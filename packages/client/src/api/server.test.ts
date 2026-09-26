@@ -132,4 +132,21 @@ describe('api server', () => {
     });
     expect(unknown.statusCode).toBe(404);
   });
+
+  it('rejects requests whose Host header is not a loopback name (DNS rebinding guard)', async () => {
+    const app = buildServer(new FakeDriver([{ projectPath: 'D:\\work\\proj A', sessionCount: 1 }]));
+    const evil = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { host: 'evil.example.com:8787' },
+    });
+    expect(evil.statusCode).toBe(403);
+    expect(evil.json()).toEqual({ error: 'host not allowed' });
+    const loopback = await app.inject({
+      method: 'GET',
+      url: '/api/projects',
+      headers: { host: '127.0.0.1:8787' },
+    });
+    expect(loopback.statusCode).toBe(200);
+  });
 });
