@@ -17,26 +17,35 @@ const LINE_TRUNCATE = 200;
 export function createJsSearchEngine(): SearchEngine {
   return {
     async search(root: string, query: string): Promise<VaultSearchMatch[]> {
-      const needle = query.trim().toLowerCase();
-      if (!needle) return [];
+      // Space-separated terms AND at the NOTE level (same rule as history
+      // search): every term must appear somewhere in the note; result rows
+      // are the lines holding any of the terms.
+      const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      if (terms.length === 0) return [];
       const matches: VaultSearchMatch[] = [];
       for (const abs of await collectMdFiles(root)) {
         if (matches.length >= MAX_TOTAL) break;
-        let perFile = 0;
+        const rel = toRelative(root, abs);
+        const seen = new Set<string>();
+        const rows: VaultSearchMatch[] = [];
         let lineNo = 0;
         const content = await fs.readFile(abs, 'utf8');
         for (const line of content.split('\n')) {
           lineNo += 1;
-          if (line.toLowerCase().includes(needle)) {
-            matches.push({
-              path: toRelative(root, abs),
-              line: lineNo,
-              text: line.slice(0, LINE_TRUNCATE),
-            });
-            perFile += 1;
-            if (perFile >= MAX_PER_FILE) break;
+          const lower = line.toLowerCase();
+          let lineHas = false;
+          for (const term of terms) {
+            if (term && lower.includes(term)) {
+              seen.add(term);
+              lineHas = true;
+            }
           }
+          if (lineHas && rows.length < MAX_PER_FILE) {
+            rows.push({ path: rel, line: lineNo, text: line.slice(0, LINE_TRUNCATE) });
+          }
+          if (seen.size === terms.length && rows.length >= MAX_PER_FILE) break;
         }
+        if (seen.size === terms.length) matches.push(...rows);
       }
       return matches.slice(0, MAX_TOTAL);
     },

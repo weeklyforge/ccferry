@@ -47,4 +47,17 @@ describe('createJsSearchEngine', () => {
     const matches = await createJsSearchEngine().search(root, 'smart heating');
     expect(matches.map((m) => m.path)).toEqual(['upper.MD']);
   });
+
+  it('ANDs space-separated terms at the note level: terms may sit on different lines', async () => {
+    await fs.writeFile(path.join(root, 'both.md'), '中枢站运行规程\n与调度有关\n二网流量调整\n');
+    await fs.writeFile(path.join(root, 'one.md'), '只有 中枢 没有别的\n');
+    const matches = await createJsSearchEngine().search(root, '中枢 二网');
+    expect(matches.map((m) => m.path)).toEqual(['both.md', 'both.md']);
+    expect(matches.map((m) => m.line)).toEqual([1, 3]);
+  });
+
+  it('a note with only one of the terms never matches', async () => {
+    await fs.writeFile(path.join(root, 'half.md'), '二网 出现\n二网 又出现\n');
+    expect(await createJsSearchEngine().search(root, '中枢 二网')).toEqual([]);
+  });
 });
