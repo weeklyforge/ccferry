@@ -10,6 +10,21 @@ registerRoute(new NavigationRoute(createHandlerBoundToURL('index.html')));
 self.skipWaiting();
 clientsClaim();
 
+// After a deploy the newly-activated SW controls pages that were rendered
+// from the OLD precache; their lazy chunks may no longer resolve, leaving
+// tabs dead (owner: tapping a tab froze the page). Reload each open client
+// once so it comes back on the new bundle.
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of clients) {
+        if ('navigate' in client) void client.navigate(client.url);
+      }
+    })(),
+  );
+});
+
 interface PushPayload {
   title?: string;
   body?: string;
