@@ -53,25 +53,42 @@ describe('searchSessions', () => {
     expect(daysOnly.matches).toHaveLength(0);
   });
 
-  it('ANDs space-separated terms: a line must contain every term', async () => {
+  it('ANDs space-separated terms at the session level: terms may sit on different lines', async () => {
     const both = summary('both');
-    await fs.writeFile(both.file, 'the smart heating plan\n');
+    await fs.writeFile(both.file, 'the smart part\nand the heating part elsewhere\n');
     both.sizeBytes = (await fs.stat(both.file)).size;
     const one = summary('one', { lastModifiedMs: Date.now() - 1000 });
     await fs.writeFile(one.file, 'only smart here\n');
     one.sizeBytes = (await fs.stat(one.file)).size;
     const { matches } = await searchSessions([both, one], 'smart heating', {});
-    expect(matches.map((m) => m.sessionId)).toEqual(['both']);
+    expect(matches.map((m) => m.sessionId)).toEqual(['both', 'both']); // one row per matching line
+    expect(matches[0]).toMatchObject({ line: 1, text: 'the smart part' });
+    expect(matches[1]).toMatchObject({ line: 2 });
   });
 
-  it('AND logic applies to title hits too', async () => {
-    const s = summary('title', { firstUserText: 'Smart Heating redesign' });
-    await fs.writeFile(s.file, 'unrelated\n');
+  it('returns at most three matching lines per session', async () => {
+    const s = summary('cap');
+    await fs.writeFile(s.file, 'hit one\nhit two\nhit three\nhit four\nhit five\n');
     s.sizeBytes = (await fs.stat(s.file)).size;
-    const hit = await searchSessions([s], 'heating smart', {});
-    expect(hit.matches.map((m) => m.sessionId)).toEqual(['title']);
-    const miss = await searchSessions([s], 'heating missing-term', {});
-    expect(miss.matches).toHaveLength(0);
+    const { matches } = await searchSessions([s], 'hit', {});
+    expect(matches).toHaveLength(3);
+  });
+
+  it('a term found in the title and the other in content satisfies AND', async () => {
+    const s = summary('mixed', { firstUserText: '中枢站改造' });
+    await fs.writeFile(s.file, '今天调整了二网流量\n');
+    s.sizeBytes = (await fs.stat(s.file)).size;
+    const { matches } = await searchSessions([s], '中枢 二网', {});
+    expect(matches.length).toBeGreaterThanOrEqual(1);
+    expect(matches.some((m) => m.text.includes('二网'))).toBe(true);
+  });
+
+  it('a session with only one of the terms never matches', async () => {
+    const s = summary('half');
+    await fs.writeFile(s.file, '只有 中枢 没有 别的词\n');
+    s.sizeBytes = (await fs.stat(s.file)).size;
+    const { matches } = await searchSessions([s], '中枢 二网', {});
+    expect(matches).toHaveLength(0);
   });
 
   it('reports truncated when a large session was only tail-scanned', async () => {
