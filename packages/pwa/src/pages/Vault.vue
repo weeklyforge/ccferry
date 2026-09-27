@@ -14,6 +14,8 @@ const names = ref<string[]>([]);
 const query = ref('');
 const matches = ref<VaultSearchMatch[] | null>(null);
 const editing = ref<string | null>(null);
+// Captured when opening a search hit so the note view can highlight terms.
+const matchQuery = ref('');
 const creating = ref(false);
 const newNotePath = ref('');
 
@@ -39,6 +41,7 @@ function enter(node: VaultNode): void {
     names.value.push(node.name);
     matches.value = null;
   } else {
+    matchQuery.value = ''; // browsed, not searched — no highlight
     editing.value = node.path;
   }
 }
@@ -89,6 +92,7 @@ async function createNote(): Promise<void> {
 }
 
 function openMatch(match: VaultSearchMatch): void {
+  matchQuery.value = query.value; // carry the search terms into the note
   editing.value = match.path;
 }
 
@@ -103,7 +107,7 @@ onMounted(() => void openRoot());
       <Field v-model="newNotePath" placeholder="路径，如 工作日报/2026-09/新笔记.md" />
       <Button size="small" type="primary" @click="createNote">创建</Button>
     </div>
-    <NoteEditor v-if="editing !== null" :path="editing" @close="editing = null" />
+    <NoteEditor v-if="editing !== null" :path="editing" :highlight-query="matchQuery" @close="editing = null" />
     <CellGroup v-else-if="matches !== null">
       <Cell
         v-for="match in matches"

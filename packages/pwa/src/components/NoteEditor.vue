@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { Button, Field, showFailToast, showSuccessToast } from 'vant';
 import { apiFetch } from '../lib/api';
+import { highlightKeywordsInElement, queryTerms } from '../lib/highlight';
 import { renderMarkdown } from '../lib/markdown';
 
-const props = defineProps<{ path: string }>();
+const props = defineProps<{ path: string; highlightQuery?: string }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
 const content = ref('');
 const saving = ref(false);
@@ -14,6 +15,16 @@ const mode = ref<'read' | 'edit'>('read');
 // with nothing. Keep Save disabled until real content has been read.
 const loadFailed = ref(true);
 const rendered = computed(() => renderMarkdown(content.value));
+const noteView = ref<HTMLElement | undefined>();
+
+// Opened from search: keep the terms highlighted in the reading view —
+// re-run whenever content re-renders (load, save back to read mode).
+const terms = computed(() => queryTerms(props.highlightQuery ?? ''));
+watch([mode, content], async () => {
+  if (mode.value !== 'read' || terms.value.length === 0) return;
+  await nextTick();
+  if (noteView.value) highlightKeywordsInElement(noteView.value, terms.value);
+});
 
 onMounted(async () => {
   const res = await apiFetch(`/api/vault/file?path=${encodeURIComponent(props.path)}`);
@@ -45,7 +56,7 @@ async function save(): Promise<void> {
 <template>
   <div class="editor">
     <div class="path">{{ path }}</div>
-    <div v-if="mode === 'read'" class="md-body note-view" v-html="rendered"></div>
+    <div v-if="mode === 'read'" ref="noteView" class="md-body note-view" v-html="rendered"></div>
     <Field v-else v-model="content" type="textarea" rows="16" autosize />
     <div class="row">
       <Button plain @click="emit('close')">关闭</Button>
