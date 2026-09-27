@@ -43,3 +43,11 @@ Verdict "Yes — with fixes": 0 Critical / 3 Important / 8 Minor; all three exec
 - [ ] Push (4G 待机): TUI agent finishes → notification; approval request → notification; PWA foreground → no duplicate; error run → notification
 - [ ] Cloud restart → subscription survives; 设置页「测试推送」可达
 - [ ] Style pass owner-approved
+
+## Post-acceptance incident: history tab froze the app (2026-09-27, owner-confirmed fixed)
+
+- Symptom: tapping the 历史 tab froze the whole PWA (tabs and buttons dead) — incognito too, with and without a token; reproduced on desktop cloud sessions as main-thread evaluate timeouts.
+- Not the cause: caches/SW (incognito ruled it out — an earlier precache-SW reload loop was real but separate, already fixed by the push-only minimal SW), auth paths, the search/list code (freeze fired on mount with an empty result list).
+- Root cause by elimination: only Vant DropdownMenu/DropdownItem were unique to the History page; NavBar+Search+Cell are proven on the vault page and Popup+Picker on the new-task page. jsdom cannot reproduce it (no real layout), which is why component-mount tests passed while real browsers froze.
+- Fix: filters became two tags opening bottom Picker popups (98a6905); verified with a freeze oracle on the live cloud — mount + main-thread evaluate + tab roundtrip all pass where the old build timed out — then owner-confirmed on the phone.
+- Lessons: an "alive" readyState check proves nothing about post-mount wedges (evaluate-return is the real oracle); Vant DropdownMenu stays off the banned-for-now list until its specific loop is understood; never ship a tab removal as a "fix" without the owner's explicit call.
