@@ -3,7 +3,8 @@ import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Button, Cell, CellGroup, Field, NavBar, Picker, Popup, showFailToast, showSuccessToast } from 'vant';
 import { ApiError, apiFetch, readSsePost } from '../lib/api';
-import { awaitStart } from '../lib/new-task-start';
+import { awaitStart, waitForNewSession } from '../lib/new-task-start';
+import { shortProject } from '../lib/project-name';
 
 const router = useRouter();
 const text = ref('');
@@ -11,11 +12,6 @@ const sending = ref(false);
 const picking = ref(false);
 const projects = ref<Array<{ text: string; value: string }>>([]);
 const project = ref('');
-
-function shortProject(p: string): string {
-  const parts = p.split('\\');
-  return parts[parts.length - 1] ?? p;
-}
 
 onMounted(async () => {
   const res = await apiFetch('/api/projects');
@@ -33,6 +29,7 @@ function confirmPick({ selectedOptions }: { selectedOptions: Array<{ text: strin
 async function start(): Promise<void> {
   if (!project.value || !text.value.trim() || sending.value) return;
   sending.value = true;
+  const startedAt = Date.now();
   try {
     // Resolve on the FIRST streamed event: the POST streams the whole first
     // agent turn, and waiting for it means a screen lock or network blip
@@ -41,8 +38,17 @@ async function start(): Promise<void> {
       (onEvent) => readSsePost('/api/messages', { projectPath: project.value, text: text.value.trim() }, onEvent),
       () => undefined,
     );
-    showSuccessToast('已创建，任务已在电脑上开始');
-    void router.replace('/');
+    showSuccessToast('已创建，正在打开会话…');
+    // The session id only reaches the stream at the end of the turn; watch
+    // the store instead and jump into the conversation as soon as it lands.
+    void (async () => {
+      const list = async (): Promise<Array<{ sessionId: string; projectPath: string; lastModifiedMs: number }>> => {
+        const res = await apiFetch('/api/sessions');
+        return res.ok ? ((await res.json()) as Array<{ sessionId: string; projectPath: string; lastModifiedMs: number }>) : [];
+      };
+      const id = await waitForNewSession(list, project.value, startedAt, { timeoutMs: 30_000 });
+      void router.replace(id ? `/session/${id}` : '/');
+    })();
   } catch (error) {
     if (error instanceof ApiError && error.status === 403) showFailToast('该项目不在允许列表中');
     else showFailToast('创建失败，请重试');

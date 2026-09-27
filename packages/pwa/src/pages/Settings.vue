@@ -29,11 +29,15 @@ function saveToken(): void {
 async function enablePush(): Promise<void> {
   try {
     const keyRes = await apiFetch('/api/push/key');
-    if (keyRes.status === 503) {
-      pushStatus.value = '云端未配置推送';
+    if (!keyRes.ok) {
+      pushStatus.value = keyRes.status === 503 ? '云端未配置推送' : keyRes.status === 401 ? '请先在上方保存访问令牌' : `获取推送配置失败（${keyRes.status}）`;
       return;
     }
-    const { publicKey } = (await keyRes.json()) as { publicKey: string };
+    const { publicKey } = (await keyRes.json()) as { publicKey?: string };
+    if (!publicKey) {
+      pushStatus.value = '推送配置无效';
+      return;
+    }
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
       pushStatus.value = '未获得通知权限';
@@ -57,6 +61,21 @@ async function enablePush(): Promise<void> {
     pushStatus.value = '推送不可用（需加主屏后重试）';
   }
 }
+
+// Already subscribed earlier? Restore the test button without re-running
+// the permission/subscribe flow after every reload.
+onMounted(async () => {
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const sub = await registration?.pushManager.getSubscription();
+    if (sub) {
+      pushSubscribed.value = true;
+      pushStatus.value = '已订阅';
+    }
+  } catch {
+    // push unsupported — the status cell keeps its default text
+  }
+});
 
 async function testPush(): Promise<void> {
   const res = await apiFetch('/api/push/test', { method: 'POST' });

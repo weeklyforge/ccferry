@@ -6,6 +6,7 @@ import { sseUrl } from './lib/api';
 import { clientId } from './lib/client-id';
 import { followSse } from './lib/sse-follow';
 import { useApprovalsStore } from './stores/approvals';
+import { useAuthStore } from './stores/auth';
 
 const route = useRoute();
 const approvals = useApprovalsStore();
@@ -15,6 +16,8 @@ let events: ReturnType<typeof followSse> | undefined;
 // connected — feeding approvals live AND marking this client as foreground
 // so the cloud suppresses pushes to it. Hidden tab closes the stream.
 function connectEvents(): void {
+  const auth = useAuthStore();
+  if (!auth.token) return; // nothing to stream — and no 401 retry storm
   events?.close();
   events = followSse(sseUrl(`/api/events/stream?clientId=${encodeURIComponent(clientId())}`), {
     onLine: (data) => {

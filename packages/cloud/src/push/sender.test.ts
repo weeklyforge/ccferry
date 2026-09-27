@@ -85,4 +85,13 @@ describe('sendTestPush', () => {
     await new Promise((r) => setTimeout(r, 20));
     expect(sent[0]!.payload.title).toContain('测试');
   });
+
+  it('bypasses foreground suppression so the test button always fires', async () => {
+    // The page sending the test is open by definition — suppression would
+    // swallow every test push (owner hit this on desktop).
+    const { buffer, sent } = harness(makeStore(), () => true);
+    await sendTestPush(buffer);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sent).toHaveLength(1);
+  });
 });

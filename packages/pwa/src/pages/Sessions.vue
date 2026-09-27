@@ -6,6 +6,7 @@ import type { SessionSummary, ToolApprovalRequest } from '@ccferry/protocol';
 import { apiFetch, readSsePost } from '../lib/api';
 import { useApprovalsStore } from '../stores/approvals';
 import { sessionStatus } from '../lib/session-status';
+import { shortProject } from '../lib/project-name';
 
 const router = useRouter();
 const approvals = useApprovalsStore();
@@ -87,7 +88,13 @@ onUnmounted(() => poll && clearInterval(poll));
     </div>
     <PullRefresh :model-value="false" @update:model-value="refresh">
       <Collapse v-model="openGroups">
-        <CollapseItem v-for="group in groups" :key="group.projectPath" :title="group.projectPath" :name="group.projectPath">
+        <CollapseItem v-for="group in groups" :key="group.projectPath" :name="group.projectPath">
+          <template #title>
+            <div class="project-cell">
+              <span class="project-name">{{ shortProject(group.projectPath) }}</span>
+              <span class="project-path">{{ group.projectPath }}</span>
+            </div>
+          </template>
           <Cell
             v-for="s in group.list"
             :key="s.sessionId"
@@ -111,4 +118,7 @@ onUnmounted(() => poll && clearInterval(poll));
 <style scoped>
 .header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; }
 h2 { font-size: 16px; margin: 0; }
+.project-cell { display: flex; flex-direction: column; }
+.project-name { font-size: 14px; font-weight: 600; }
+.project-path { font-size: 11px; color: var(--cc-text-secondary, #969799); word-break: break-all; }
 </style>

@@ -5,6 +5,7 @@ import { Cell, CellGroup, DropdownMenu, DropdownItem, NavBar, Search, Tag } from
 import { apiFetch } from '../lib/api';
 import { highlightSegments } from '../lib/highlight';
 import { debounce } from '../lib/debounce';
+import { shortProject } from '../lib/project-name';
 
 interface HistoryMatch {
   sessionId: string;
@@ -21,12 +22,8 @@ const project = ref('');
 const days = ref(0);
 const matches = ref<HistoryMatch[]>([]);
 const truncated = ref(false);
+const notice = ref('');
 const projects = ref<Array<{ text: string; value: string }>>([]);
-
-function shortProject(p: string): string {
-  const parts = p.split('\\');
-  return parts[parts.length - 1] ?? p;
-}
 
 function relative(ms: number): string {
   const minutes = Math.round((Date.now() - ms) / 60000);
@@ -35,28 +32,47 @@ function relative(ms: number): string {
   return `${Math.round(minutes / 1440)} 天前`;
 }
 
+// Sequence searches: a slow broad query must never overwrite a newer
+// narrow one's results.
+let searchSeq = 0;
+
 const runSearch = debounce(async () => {
-  if (!query.value.trim()) {
+  const seq = ++searchSeq;
+  const q = query.value.trim();
+  if (!q) {
     matches.value = [];
     truncated.value = false;
+    notice.value = '';
     return;
   }
-  const params = new URLSearchParams({ q: query.value.trim() });
+  const params = new URLSearchParams({ q });
   if (project.value) params.set('project', project.value);
   if (days.value) params.set('days', String(days.value));
-  const res = await apiFetch(`/api/history/search?${params.toString()}`);
-  if (res.ok) {
-    const body = (await res.json()) as { matches: HistoryMatch[]; truncated: boolean };
-    matches.value = body.matches;
-    truncated.value = body.truncated;
+  try {
+    const res = await apiFetch(`/api/history/search?${params.toString()}`);
+    if (seq !== searchSeq) return; // superseded by a newer search
+    if (res.ok) {
+      const body = (await res.json()) as { matches: HistoryMatch[]; truncated: boolean };
+      matches.value = body.matches;
+      truncated.value = body.truncated;
+      notice.value = '';
+    } else {
+      notice.value = `搜索失败（${res.status}）`;
+    }
+  } catch {
+    if (seq === searchSeq) notice.value = '搜索失败，请检查网络';
   }
 }, 300);
 
 onMounted(async () => {
-  const res = await apiFetch('/api/projects');
-  if (res.ok) {
-    const body = (await res.json()) as { projects: Array<{ projectPath: string }> };
-    projects.value = body.projects.map((p) => ({ text: shortProject(p.projectPath), value: p.projectPath }));
+  try {
+    const res = await apiFetch('/api/projects');
+    if (res.ok) {
+      const body = (await res.json()) as { projects: Array<{ projectPath: string }> };
+      projects.value = body.projects.map((p) => ({ text: shortProject(p.projectPath), value: p.projectPath }));
+    }
+  } catch {
+    // project filter simply stays empty — search still works unfiltered
   }
 });
 </script>
@@ -69,6 +85,7 @@ onMounted(async () => {
       <DropdownItem v-model="project" :options="[{ text: '全部项目', value: '' }, ...projects]" @change="runSearch" />
       <DropdownItem v-model="days" :options="[{ text: '全部时间', value: 0 }, { text: '7 天', value: 7 }, { text: '30 天', value: 30 }]" @change="runSearch" />
     </DropdownMenu>
+    <div v-if="notice" class="notice">{{ notice }}</div>
     <div v-if="truncated" class="notice">仅扫描了最近部分会话（20MB 上限）——缩小范围可查更早内容</div>
     <CellGroup>
       <Cell

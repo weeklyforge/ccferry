@@ -5,6 +5,7 @@ export interface PushPayload {
   title: string;
   body: string;
   sessionId?: string;
+  force?: boolean;
 }
 
 export interface PushSenderOptions {
@@ -29,6 +30,7 @@ function payloadFor(event: Record<string, unknown>): PushPayload | null {
       title,
       body: String(event['excerpt'] ?? ''),
       sessionId: typeof event['sessionId'] === 'string' ? event['sessionId'] : undefined,
+      force: event['force'] === true,
     };
   }
   return null;
@@ -55,14 +57,15 @@ export function attachPushSender(buffer: EventBuffer, opts: PushSenderOptions): 
 }
 
 // Rides the real buffer path so the settings-page test button exercises the
-// exact delivery logic (suppression, dedup, 410 cleanup included).
+// exact delivery logic — but force=true, because the page sending the test
+// is open by definition and plain suppression would swallow it every time.
 export async function sendTestPush(buffer: EventBuffer): Promise<void> {
-  buffer.push({ kind: 'result', sessionId: 'test', ok: true, excerpt: '这是一条测试推送', at: Date.now(), title: '测试推送' });
+  buffer.push({ kind: 'result', sessionId: 'test', ok: true, excerpt: '这是一条测试推送', at: Date.now(), title: '测试推送', force: true });
 }
 
 async function deliver(opts: PushSenderOptions, payload: PushPayload): Promise<void> {
   for (const sub of opts.store.list()) {
-    if (opts.isForeground(sub.clientId)) continue;
+    if (!payload.force && opts.isForeground(sub.clientId)) continue;
     try {
       await opts.send(sub, JSON.stringify(payload));
     } catch (error) {

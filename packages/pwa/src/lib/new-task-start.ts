@@ -21,3 +21,35 @@ export async function awaitStart(
     });
   });
 }
+
+interface SessionRow {
+  sessionId: string;
+  projectPath: string;
+  lastModifiedMs: number;
+}
+
+// The new session's id only reaches the stream at the END of the first
+// agent turn; the session FILE, though, shows up in the store within a
+// scan cycle. Poll the store for it so the app can jump straight into the
+// conversation (null on timeout — caller falls back to the list).
+export async function waitForNewSession(
+  list: () => Promise<SessionRow[]>,
+  projectPath: string,
+  sinceMs: number,
+  opts: { pollMs?: number; timeoutMs?: number } = {},
+): Promise<string | null> {
+  const pollMs = opts.pollMs ?? 2000;
+  const deadline = Date.now() + (opts.timeoutMs ?? 20_000);
+  for (;;) {
+    try {
+      const hit = (await list()).find(
+        (s) => s.projectPath === projectPath && s.lastModifiedMs >= sinceMs - 1000,
+      );
+      if (hit) return hit.sessionId;
+    } catch {
+      // transient list failure — keep polling until the deadline
+    }
+    if (Date.now() >= deadline) return null;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}
