@@ -146,12 +146,15 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.session { display: flex; flex-direction: column; height: calc(100vh - 100px); }
+/* Fill the viewport minus the 50px tabbar (plus iOS safe area) so the
+   composer sits flush on top of the tabbar. */
+.session { display: flex; flex-direction: column; height: calc(100vh - 50px - env(safe-area-inset-bottom, 0px)); padding-bottom: 0; }
 .stream { flex: 1; overflow-y: auto; padding: 12px; }
 .bubble { margin: 6px 0; padding: 8px 12px; border-radius: var(--cc-radius); background: #f2f3f5; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
 .bubble.user { background: #1989fa; color: white; }
 .bubble.tool { background: #fffbe8; font-size: 12px; }
 .bubble.raw { background: #f7f7f7; color: #969799; font-size: 12px; }
 .error { color: var(--cc-danger); font-size: 12px; }
-.composer { display: flex; gap: 8px; padding: 8px; align-items: center; }
+.composer { display: flex; gap: 8px; padding: 8px; align-items: center; background: var(--cc-surface, #fff); }
+.composer :deep(.van-field) { flex: 1; }
 </style>
