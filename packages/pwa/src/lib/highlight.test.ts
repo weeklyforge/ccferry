@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { highlightSegments } from './highlight';
+import { highlightSegments, queryTerms } from './highlight';
 
 describe('highlightSegments', () => {
   it('splits text around case-insensitive query matches', () => {
@@ -26,5 +26,23 @@ describe('highlightSegments', () => {
 
   it('returns one plain segment for an empty query', () => {
     expect(highlightSegments('anything', '  ')).toEqual([{ text: 'anything', hit: false }]);
+  });
+
+  it('AND queries highlight every term', () => {
+    expect(highlightSegments('Smart Heating plan', 'heating smart')).toEqual([
+      { text: 'Smart', hit: true },
+      { text: ' ', hit: false },
+      { text: 'Heating', hit: true },
+      { text: ' plan', hit: false },
+    ]);
+  });
+
+  it('merges overlapping term ranges into one hit', () => {
+    expect(highlightSegments('aaa', 'aa a')).toEqual([{ text: 'aaa', hit: true }]);
+  });
+
+  it('queryTerms splits and lowercases on whitespace', () => {
+    expect(queryTerms('  Smart HEATING  plan ')).toEqual(['smart', 'heating', 'plan']);
+    expect(queryTerms('   ')).toEqual([]);
   });
 });

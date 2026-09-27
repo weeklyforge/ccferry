@@ -53,6 +53,27 @@ describe('searchSessions', () => {
     expect(daysOnly.matches).toHaveLength(0);
   });
 
+  it('ANDs space-separated terms: a line must contain every term', async () => {
+    const both = summary('both');
+    await fs.writeFile(both.file, 'the smart heating plan\n');
+    both.sizeBytes = (await fs.stat(both.file)).size;
+    const one = summary('one', { lastModifiedMs: Date.now() - 1000 });
+    await fs.writeFile(one.file, 'only smart here\n');
+    one.sizeBytes = (await fs.stat(one.file)).size;
+    const { matches } = await searchSessions([both, one], 'smart heating', {});
+    expect(matches.map((m) => m.sessionId)).toEqual(['both']);
+  });
+
+  it('AND logic applies to title hits too', async () => {
+    const s = summary('title', { firstUserText: 'Smart Heating redesign' });
+    await fs.writeFile(s.file, 'unrelated\n');
+    s.sizeBytes = (await fs.stat(s.file)).size;
+    const hit = await searchSessions([s], 'heating smart', {});
+    expect(hit.matches.map((m) => m.sessionId)).toEqual(['title']);
+    const miss = await searchSessions([s], 'heating missing-term', {});
+    expect(miss.matches).toHaveLength(0);
+  });
+
   it('reports truncated when a large session was only tail-scanned', async () => {
     // >4MB session with the needle in its HEAD: the per-file cap skips the
     // head, so a miss must not be presented as a complete answer (spec D4).

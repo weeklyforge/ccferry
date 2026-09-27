@@ -97,7 +97,7 @@ onMounted(() => void openRoot());
 
 <template>
   <div class="page">
-    <NavBar :title="title" left-arrow @click-left="back" />
+    <NavBar :title="title" left-arrow fixed placeholder @click-left="back" />
     <Search v-model="query" placeholder="搜索笔记" @update:model-value="runSearch" />
     <div v-if="creating" class="create-row">
       <Field v-model="newNotePath" placeholder="路径，如 工作日报/2026-09/新笔记.md" />

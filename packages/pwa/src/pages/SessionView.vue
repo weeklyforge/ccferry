@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { Button, Field, showConfirmDialog } from 'vant';
 import type { ApprovalSettledFrame, ParsedLine, ToolApprovalRequest } from '@ccferry/protocol';
 import { ApiError, readSsePost, sseUrl } from '../lib/api';
+import { highlightKeywordsInElement, queryTerms } from '../lib/highlight';
 import { renderMarkdown } from '../lib/markdown';
 import { followSse } from '../lib/sse-follow';
 import { useApprovalsStore } from '../stores/approvals';
@@ -21,6 +22,16 @@ const sending = ref(false);
 let stream: ReturnType<typeof followSse> | undefined;
 let approvalsStream: EventSource | undefined;
 const bottom = ref<HTMLElement | undefined>();
+
+// Opened from search (?q=): keep the keywords highlighted in the live
+// stream — re-run after every render because v-html resets the DOM.
+const searchTerms = queryTerms(typeof route.query['q'] === 'string' ? route.query['q'] : '');
+watch(bubbles, async () => {
+  if (searchTerms.length === 0) return;
+  await nextTick();
+  const stream = bottom.value?.parentElement;
+  if (stream) highlightKeywordsInElement(stream, searchTerms);
+});
 
 function pushBubble(line: ParsedLine): void {
   const bubble = parsedLineToBubble(line);

@@ -29,8 +29,9 @@ export async function searchSessions(
   query: string,
   filter: { project?: string; days?: number; limit?: number; byteCapBytes?: number },
 ): Promise<HistoryResult> {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return { matches: [], truncated: false };
+  // Space-separated terms AND together: a hit must contain every term.
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return { matches: [], truncated: false };
   const minTime = filter.days ? Date.now() - filter.days * 86_400_000 : 0;
   const pool = sessions
     .filter((s) => (!filter.project || s.projectPath === filter.project) && s.lastModifiedMs >= minTime)
@@ -42,7 +43,7 @@ export async function searchSessions(
   for (const s of pool) {
     if (matches.length >= limit) break;
     const title = s.firstUserText.toLowerCase();
-    if (title.includes(needle)) {
+    if (terms.every((t) => title.includes(t))) {
       matches.push({
         sessionId: s.sessionId,
         projectPath: s.projectPath,
@@ -83,7 +84,8 @@ export async function searchSessions(
     const lines = text.split('\n');
     for (let i = 0; i < lines.length && matches.length < limit; i++) {
       const line = lines[i]!;
-      if (line.toLowerCase().includes(needle)) {
+      const lower = line.toLowerCase();
+      if (terms.every((t) => lower.includes(t))) {
         matches.push({
           sessionId: s.sessionId,
           projectPath: s.projectPath,

@@ -116,7 +116,7 @@ onUnmounted(() => poll && clearInterval(poll));
 </template>
 
 <style scoped>
-.header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; }
+.header { position: sticky; top: 0; z-index: 1; background: var(--cc-surface-alt, #f7f8fa); display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; }
 h2 { font-size: 16px; margin: 0; }
 .project-cell { display: flex; flex-direction: column; }
 .project-name { font-size: 14px; font-weight: 600; }

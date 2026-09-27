@@ -60,7 +60,7 @@ async function start(): Promise<void> {
 
 <template>
   <div class="page">
-    <NavBar title="新任务" />
+    <NavBar title="新任务" fixed placeholder />
     <CellGroup title="项目">
       <Cell title="选择项目" :value="project ? shortProject(project) : '未选择'" is-link @click="picking = true" />
     </CellGroup>

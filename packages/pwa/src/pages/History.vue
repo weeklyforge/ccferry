@@ -116,7 +116,7 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <NavBar title="历史" />
+    <NavBar title="历史" fixed placeholder />
     <Search v-model="query" placeholder="搜索会话内容与标题" @update:model-value="runSearch" />
     <div class="filters">
       <Tag size="large" plain type="primary" @click="onPick('project')">{{ projectLabel() }}</Tag>
@@ -130,7 +130,7 @@ onMounted(async () => {
         :key="m.sessionId + m.line"
         :title="m.firstUserText || '(无摘要)'"
         is-link
-        @click="router.push(`/session/${m.sessionId}`)"
+        @click="router.push(`/session/${m.sessionId}?q=${encodeURIComponent(query)}`)"
       >
         <template #label>
           <span>{{ shortProject(m.projectPath) }} · {{ relative(m.lastModifiedMs) }} ·
