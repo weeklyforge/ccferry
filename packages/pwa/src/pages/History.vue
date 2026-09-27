@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Cell, CellGroup, DropdownMenu, DropdownItem, NavBar, Search, Tag } from 'vant';
+import { Cell, CellGroup, NavBar, Picker, Popup, Search, Tag } from 'vant';
 import { apiFetch } from '../lib/api';
 import { highlightSegments } from '../lib/highlight';
 import { debounce } from '../lib/debounce';
@@ -24,6 +24,41 @@ const matches = ref<HistoryMatch[]>([]);
 const truncated = ref(false);
 const notice = ref('');
 const projects = ref<Array<{ text: string; value: string }>>([]);
+const picking = ref<'project' | 'days' | null>(null);
+
+const dayOptions = [
+  { text: '全部时间', value: 0 },
+  { text: '7 天', value: 7 },
+  { text: '30 天', value: 30 },
+];
+
+const projectOptions = ref<Array<{ text: string; value: string }>>([{ text: '全部项目', value: '' }]);
+
+function dayLabel(): string {
+  return dayOptions.find((o) => o.value === days.value)?.text ?? '全部时间';
+}
+
+function projectLabel(): string {
+  return project.value ? shortProject(project.value) : '全部项目';
+}
+
+// Filters use Popup+Picker (the combination proven on the phone by the
+// new-task page) — Vant DropdownMenu froze the tab on real devices.
+function onPick(kind: 'project' | 'days'): void {
+  picking.value = kind;
+}
+
+function confirmProject({ selectedOptions }: { selectedOptions: Array<{ value: string }> }): void {
+  project.value = selectedOptions[0]?.value ?? '';
+  picking.value = null;
+  runSearch();
+}
+
+function confirmDays({ selectedOptions }: { selectedOptions: Array<{ value: number }> }): void {
+  days.value = selectedOptions[0]?.value ?? 0;
+  picking.value = null;
+  runSearch();
+}
 
 function relative(ms: number): string {
   const minutes = Math.round((Date.now() - ms) / 60000);
@@ -69,7 +104,9 @@ onMounted(async () => {
     const res = await apiFetch('/api/projects');
     if (res.ok) {
       const body = (await res.json()) as { projects: Array<{ projectPath: string }> };
-      projects.value = body.projects.map((p) => ({ text: shortProject(p.projectPath), value: p.projectPath }));
+      const loaded = body.projects.map((p) => ({ text: shortProject(p.projectPath), value: p.projectPath }));
+      projects.value = loaded;
+      projectOptions.value = [{ text: '全部项目', value: '' }, ...loaded];
     }
   } catch {
     // project filter simply stays empty — search still works unfiltered
@@ -80,11 +117,11 @@ onMounted(async () => {
 <template>
   <div class="page">
     <NavBar title="历史" />
-    <DropdownMenu>
-      <DropdownItem v-model="project" :options="[{ text: '全部项目', value: '' }, ...projects]" @change="runSearch" />
-      <DropdownItem v-model="days" :options="[{ text: '全部时间', value: 0 }, { text: '7 天', value: 7 }, { text: '30 天', value: 30 }]" @change="runSearch" />
-    </DropdownMenu>
     <Search v-model="query" placeholder="搜索会话内容与标题" @update:model-value="runSearch" />
+    <div class="filters">
+      <Tag size="large" plain type="primary" @click="onPick('project')">{{ projectLabel() }}</Tag>
+      <Tag size="large" plain type="primary" @click="onPick('days')">{{ dayLabel() }}</Tag>
+    </div>
     <div v-if="notice" class="notice">{{ notice }}</div>
     <div v-if="truncated" class="notice">仅扫描了最近部分会话（20MB 上限）——缩小范围可查更早内容</div>
     <CellGroup>
@@ -104,9 +141,16 @@ onMounted(async () => {
       </Cell>
       <Cell v-if="query && matches.length === 0" title="（无结果）" />
     </CellGroup>
+    <Popup :show="picking === 'project'" position="bottom" round @update:show="picking = null">
+      <Picker :columns="projectOptions" @confirm="confirmProject" @cancel="picking = null" />
+    </Popup>
+    <Popup :show="picking === 'days'" position="bottom" round @update:show="picking = null">
+      <Picker :columns="dayOptions" @confirm="confirmDays" @cancel="picking = null" />
+    </Popup>
   </div>
 </template>
 
 <style scoped>
+.filters { display: flex; gap: 8px; padding: 8px 12px; }
 .notice { padding: 6px 12px; font-size: 12px; color: #ff976a; }
 </style>
