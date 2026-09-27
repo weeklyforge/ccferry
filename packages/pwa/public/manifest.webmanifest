@@ -1,0 +1,9 @@
+{
+  "name": "ccferry",
+  "short_name": "ccferry",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1989fa",
+  "start_url": "/",
+  "icons": []
+}

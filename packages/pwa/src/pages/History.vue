@@ -80,11 +80,11 @@ onMounted(async () => {
 <template>
   <div class="page">
     <NavBar title="历史" />
-    <Search v-model="query" placeholder="搜索会话内容与标题" @update:model-value="runSearch" />
     <DropdownMenu>
       <DropdownItem v-model="project" :options="[{ text: '全部项目', value: '' }, ...projects]" @change="runSearch" />
       <DropdownItem v-model="days" :options="[{ text: '全部时间', value: 0 }, { text: '7 天', value: 7 }, { text: '30 天', value: 30 }]" @change="runSearch" />
     </DropdownMenu>
+    <Search v-model="query" placeholder="搜索会话内容与标题" @update:model-value="runSearch" />
     <div v-if="notice" class="notice">{{ notice }}</div>
     <div v-if="truncated" class="notice">仅扫描了最近部分会话（20MB 上限）——缩小范围可查更早内容</div>
     <CellGroup>
