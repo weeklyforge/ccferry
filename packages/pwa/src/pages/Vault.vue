@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onActivated, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Button, Cell, CellGroup, Field, NavBar, Search, showFailToast } from 'vant';
 import type { VaultNode, VaultSearchMatch } from '@ccferry/protocol';
@@ -7,6 +7,8 @@ import NoteEditor from '../components/NoteEditor.vue';
 import { apiFetch } from '../lib/api';
 import { highlightSegments } from '../lib/highlight';
 import { debounce } from '../lib/debounce';
+
+defineOptions({ name: 'Vault' });
 
 const router = useRouter();
 const stack = ref<VaultNode[][]>([]);
@@ -97,6 +99,12 @@ function openMatch(match: VaultSearchMatch): void {
 }
 
 onMounted(() => void openRoot());
+// KeepAlive: coming back to the tab shows the cached tree (and drill-down
+// position) instantly; refresh the listing in the background only when we
+// sit at the root, so a drilled-in position is never reset under the user.
+onActivated(() => {
+  if (stack.value.length <= 1) void openRoot();
+});
 </script>
 
 <template>

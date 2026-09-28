@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onActivated, onDeactivated, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { Button, Cell, Collapse, CollapseItem, PullRefresh, Tag, showConfirmDialog, showDialog, showFailToast } from 'vant';
 import type { SessionSummary, ToolApprovalRequest } from '@ccferry/protocol';
@@ -7,6 +7,8 @@ import { apiFetch, readSsePost } from '../lib/api';
 import { useApprovalsStore } from '../stores/approvals';
 import { sessionStatus } from '../lib/session-status';
 import { shortProject } from '../lib/project-name';
+
+defineOptions({ name: 'Sessions' });
 
 const router = useRouter();
 const approvals = useApprovalsStore();
@@ -73,9 +75,15 @@ function relative(ms: number): string {
   return `${Math.round(minutes / 60)} 小时前`;
 }
 
-onMounted(() => {
+// KeepAlive lifecycle: the page instance survives tab switches. Refresh on
+// every activation (stale-while-revalidate); poll only while visible.
+onActivated(() => {
   void refresh();
-  poll = setInterval(() => void refresh(), 10_000);
+  if (!poll) poll = setInterval(() => void refresh(), 10_000);
+});
+onDeactivated(() => {
+  if (poll) clearInterval(poll);
+  poll = undefined;
 });
 onUnmounted(() => poll && clearInterval(poll));
 </script>

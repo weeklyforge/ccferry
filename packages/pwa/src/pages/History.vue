@@ -16,6 +16,8 @@ interface HistoryMatch {
   lastModifiedMs: number;
 }
 
+defineOptions({ name: 'History' });
+
 const router = useRouter();
 const query = ref('');
 const project = ref('');

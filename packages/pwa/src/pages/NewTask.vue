@@ -6,6 +6,8 @@ import { ApiError, apiFetch, readSsePost } from '../lib/api';
 import { awaitStart, waitForNewSession } from '../lib/new-task-start';
 import { shortProject } from '../lib/project-name';
 
+defineOptions({ name: 'NewTask' });
+
 const router = useRouter();
 const text = ref('');
 const sending = ref(false);

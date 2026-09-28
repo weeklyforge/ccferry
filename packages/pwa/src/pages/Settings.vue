@@ -6,6 +6,8 @@ import { clientId } from '../lib/client-id';
 import { urlBase64ToUint8Array } from '../lib/push';
 import { useAuthStore } from '../stores/auth';
 
+defineOptions({ name: 'Settings' });
+
 const auth = useAuthStore();
 const tokenInput = ref(auth.token);
 const vaultStatus = ref('检测中…');

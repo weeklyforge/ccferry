@@ -56,7 +56,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <router-view :key="route.fullPath" />
+  <!-- KeepAlive caches the five tab pages: switching tabs shows the last
+       state instantly (no white screen) while onActivated refreshes data in
+       the background. Session views are keyed per id and NOT cached. -->
+  <router-view v-slot="{ Component }">
+    <keep-alive :include="['Sessions', 'History', 'Vault', 'NewTask', 'Settings']">
+      <component :is="Component" :key="route.fullPath" />
+    </keep-alive>
+  </router-view>
   <Tabbar route placeholder>
     <TabbarItem replace to="/" icon="chat-o">会话</TabbarItem>
     <TabbarItem replace to="/history" icon="clock-o">历史</TabbarItem>
