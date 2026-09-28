@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Cell, CellGroup, NavBar, Picker, Popup, Search, Tag } from 'vant';
+import { Cell, CellGroup, Loading, NavBar, Picker, Popup, Search, Tag } from 'vant';
 import { apiFetch } from '../lib/api';
 import { highlightSegments } from '../lib/highlight';
 import { debounce } from '../lib/debounce';
@@ -72,6 +72,7 @@ function relative(ms: number): string {
 // Sequence searches: a slow broad query must never overwrite a newer
 // narrow one's results.
 let searchSeq = 0;
+const searching = ref(false);
 
 const runSearch = debounce(async () => {
   const seq = ++searchSeq;
@@ -80,14 +81,17 @@ const runSearch = debounce(async () => {
     matches.value = [];
     truncated.value = false;
     notice.value = '';
+    searching.value = false;
     return;
   }
   const params = new URLSearchParams({ q });
   if (project.value) params.set('project', project.value);
   if (days.value) params.set('days', String(days.value));
+  searching.value = true;
   try {
     const res = await apiFetch(`/api/history/search?${params.toString()}`);
     if (seq !== searchSeq) return; // superseded by a newer search
+    searching.value = false;
     if (res.ok) {
       const body = (await res.json()) as { matches: HistoryMatch[]; truncated: boolean };
       matches.value = body.matches;
@@ -97,7 +101,10 @@ const runSearch = debounce(async () => {
       notice.value = res.status === 401 ? '尚未授权——请到「设置」页保存访问令牌' : `搜索失败（${res.status}）`;
     }
   } catch {
-    if (seq === searchSeq) notice.value = '搜索失败，请检查网络';
+    if (seq === searchSeq) {
+      searching.value = false;
+      notice.value = '搜索失败，请检查网络';
+    }
   }
 }, 300);
 
@@ -124,6 +131,7 @@ onMounted(async () => {
       <Tag size="large" plain type="primary" @click="onPick('project')">{{ projectLabel() }}</Tag>
       <Tag size="large" plain type="primary" @click="onPick('days')">{{ dayLabel() }}</Tag>
     </div>
+    <div v-if="searching" class="searching"><Loading size="20">搜索中…</Loading></div>
     <div v-if="notice" class="notice">{{ notice }}</div>
     <div v-if="truncated" class="notice">仅扫描了最近部分会话（20MB 上限）——缩小范围可查更早内容</div>
     <CellGroup>
@@ -154,5 +162,6 @@ onMounted(async () => {
 
 <style scoped>
 .filters { display: flex; gap: 8px; padding: 8px 12px; }
+.searching { display: flex; justify-content: center; padding: 24px 0; }
 .notice { padding: 6px 12px; font-size: 12px; color: #ff976a; }
 </style>

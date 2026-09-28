@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Button, Cell, CellGroup, Field, NavBar, Search, showFailToast } from 'vant';
+import { Button, Cell, CellGroup, Field, Loading, NavBar, Search, showFailToast } from 'vant';
 import type { VaultNode, VaultSearchMatch } from '@ccferry/protocol';
 import NoteEditor from '../components/NoteEditor.vue';
 import GuideCard from '../components/GuideCard.vue';
@@ -18,6 +18,7 @@ const query = ref('');
 const matches = ref<VaultSearchMatch[] | null>(null);
 const editing = ref<string | null>(null);
 const unauthorized = ref(false);
+const loading = ref(true);
 // Captured when opening a search hit so the note view can highlight terms.
 const matchQuery = ref('');
 const creating = ref(false);
@@ -28,17 +29,23 @@ const title = computed(() => names.value[names.value.length - 1] ?? '知识库')
 const current = () => stack.value[stack.value.length - 1] ?? [];
 
 async function openRoot(): Promise<void> {
+  loading.value = true;
   const res = await apiFetch('/api/vault/tree');
   unauthorized.value = res.status === 401;
   if (res.status === 503) {
     names.value = ['知识库（未配置）'];
     stack.value = [];
+    loading.value = false;
     return;
   }
-  if (!res.ok) return;
+  if (!res.ok) {
+    loading.value = false;
+    return;
+  }
   const body = await res.json();
   stack.value = [body['tree'] as VaultNode[]];
   names.value = [];
+  loading.value = false;
 }
 
 function enter(node: VaultNode): void {
@@ -121,6 +128,10 @@ onActivated(() => {
     />
     <template v-else>
       <Search v-model="query" placeholder="搜索笔记" @update:model-value="runSearch" />
+    <div v-if="loading" class="loading-wrap">
+      <Loading size="24" vertical>加载中…</Loading>
+    </div>
+    <template v-else>
     <div v-if="creating" class="create-row">
       <Field v-model="newNotePath" placeholder="路径，如 工作日报/2026-09/新笔记.md" />
       <Button size="small" type="primary" @click="createNote">创建</Button>
@@ -156,6 +167,7 @@ onActivated(() => {
 </template>
 
 <style scoped>
+.loading-wrap { display: flex; justify-content: center; padding: 80px 0; }
 .create-row { display: flex; gap: 8px; padding: 8px; align-items: center; }
 .new-note { margin: 8px; width: calc(100% - 16px); }
 </style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onDeactivated, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { Button, Cell, Collapse, CollapseItem, PullRefresh, Tag, showConfirmDialog, showDialog, showFailToast } from 'vant';
+import { Button, Cell, Collapse, CollapseItem, Loading, PullRefresh, Tag, showConfirmDialog, showDialog, showFailToast } from 'vant';
 import type { SessionSummary, ToolApprovalRequest } from '@ccferry/protocol';
 import { apiFetch, readSsePost } from '../lib/api';
 import { useApprovalsStore } from '../stores/approvals';
@@ -15,6 +15,7 @@ const router = useRouter();
 const approvals = useApprovalsStore();
 const sessions = ref<SessionSummary[]>([]);
 const unauthorized = ref(false);
+const loading = ref(true);
 const openGroups = ref<string[]>([]);
 const agentText = ref('');
 let poll: ReturnType<typeof setInterval> | undefined;
@@ -37,6 +38,7 @@ async function refresh(): Promise<void> {
   ]).catch(() => [undefined, undefined] as const);
   unauthorized.value = sessionsRes?.status === 401;
   if (sessionsRes?.ok) sessions.value = await sessionsRes.json();
+  loading.value = false;
   if (approvalsRes?.ok) {
     for (const request of (await approvalsRes.json())['approvals'] as ToolApprovalRequest[]) {
       approvals.ingest(request);
@@ -102,6 +104,9 @@ onUnmounted(() => poll && clearInterval(poll));
       title="尚未授权"
       description="先到「设置」页保存访问令牌，即可在这里查看所有会话"
     />
+    <div v-else-if="loading && sessions.length === 0" class="loading-wrap">
+      <Loading size="24" vertical>加载中…</Loading>
+    </div>
     <PullRefresh v-else :model-value="false" @update:model-value="refresh">
       <Collapse v-model="openGroups">
         <CollapseItem v-for="group in groups" :key="group.projectPath" :name="group.projectPath">
@@ -132,6 +137,7 @@ onUnmounted(() => poll && clearInterval(poll));
 </template>
 
 <style scoped>
+.loading-wrap { display: flex; justify-content: center; padding: 80px 0; }
 .header { position: sticky; top: 0; z-index: 1; background: var(--cc-surface-alt, #f7f8fa); display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; }
 h2 { font-size: 16px; margin: 0; }
 .project-cell { display: flex; flex-direction: column; }
