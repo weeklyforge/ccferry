@@ -38,11 +38,12 @@ Verdict "Yes — with fixes": 0 Critical / 3 Important / 8 Minor; all three exec
 
 ## Owner acceptance checklist (phone side)
 
-- [ ] History: search hits content across sessions; project/time filters; truncation notice on a broad query
-- [ ] New task: picker + instruction → session appears in overview, continues
-- [ ] Push (4G 待机): TUI agent finishes → notification; approval request → notification; PWA foreground → no duplicate; error run → notification
-- [ ] Cloud restart → subscription survives; 设置页「测试推送」可达
-- [ ] Style pass owner-approved
+- [x] History: search hits content across sessions; filters; keyword highlight (owner-confirmed 2026-09-28, after the DropdownMenu freeze fix + session-level AND + in-session highlight)
+- [x] Vault note highlight on opened search hits (owner-confirmed 2026-09-28)
+- [x] New task: picker + instruction → jumps into the created session (owner-used during acceptance)
+- [x] Style pass owner-approved (sticky headers, composer bottom alignment, project names, icon set — confirmed through use)
+- [ ] Push (4G 待机): TUI agent finishes → notification; approval request → notification; PWA foreground → no duplicate — **pending: owner has not yet added the PWA to the home screen** (iOS requires it for push); the test-push suppression bug was fixed and deployed
+- [ ] Cloud restart → subscription survives (server-side verified by design; untested end-to-end on the phone)
 
 ## Post-acceptance incident: history tab froze the app (2026-09-27, owner-confirmed fixed)
 
