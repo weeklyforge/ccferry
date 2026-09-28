@@ -19,9 +19,10 @@ describe('parsedLineToBubble', () => {
       line: 1,
       json: { type: 'user', timestamp: '2026-09-27T14:05:00.000Z', message: { content: 'hi' } },
     });
-    // Local timezone dependent — assert shape, not the exact clock.
+    // Local timezone dependent — assert shape, not the exact clock. The
+    // fixture date may fall on "today" or not, so both labels are valid.
     expect(bubble).toMatchObject({ kind: 'text', role: 'user', text: 'hi' });
-    expect(bubble && 'ts' in bubble && bubble.ts).toMatch(/^\d{2}:\d{2}$/);
+    expect(bubble && 'ts' in bubble && bubble.ts).toMatch(/^(?:\d{2}-\d{2} )?\d{2}:\d{2}$/);
     const noTs = parsedLineToBubble({ ok: true, line: 2, json: { type: 'user', message: { content: 'x' } } });
     expect(noTs && 'ts' in noTs && noTs.ts).toBeUndefined();
   });
@@ -39,5 +40,17 @@ describe('parsedLineToBubble', () => {
     expect(parsedLineToBubble({ ok: false, line: 4, raw: 'garbage{' })).toEqual({ kind: 'raw', text: 'garbage{' });
     expect(parsedLineToBubble({ ok: false, line: 5, raw: '' })).toBeNull();
     expect(parsedLineToBubble({ ok: true, line: 6, json: { type: 'system', subtype: 'init' } })).toBeNull();
+  });
+});
+
+describe('parsedLineToBubble time label', () => {
+  it('prefixes the date for lines from another day', () => {
+    // A fixed past instant must always carry a MM-DD prefix.
+    const withDate = parsedLineToBubble({
+      ok: true,
+      line: 1,
+      json: { type: 'user', timestamp: '2020-01-02T03:04:00.000Z', message: { content: 'hi' } },
+    });
+    expect(withDate && 'ts' in withDate && withDate.ts).toMatch(/^\d{2}-\d{2} \d{2}:\d{2}$/);
   });
 });

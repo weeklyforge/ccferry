@@ -1,12 +1,18 @@
 import type { ParsedLine } from '@ccferry/protocol';
 
-// Local wall-clock HH:mm for the bubble time label.
-function fmtTime(iso: string): string {
+// Local wall-clock label for the bubble: HH:mm today, MM-DD HH:mm otherwise.
+function fmtTime(iso: string, now = new Date()): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${hh}:${mm}`;
+  const time = `${hh}:${mm}`;
+  const sameDay =
+    d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  if (sameDay) return time;
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${mo}-${dd} ${time}`;
 }
 
 export type Bubble =
