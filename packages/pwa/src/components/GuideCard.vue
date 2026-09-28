@@ -31,5 +31,5 @@ function goSettings(): void {
 <style scoped>
 .guide { padding-top: 15vh; }
 .guide-desc { margin: 0; font-size: 13px; color: var(--cc-text-secondary, #969799); }
-.guide-link { color: var(--cc-primary, #1989fa); }
+.guide-link { color: var(--cc-primary, #1989fa); cursor: pointer; }
 </style>
