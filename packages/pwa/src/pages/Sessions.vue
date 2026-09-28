@@ -7,12 +7,14 @@ import { apiFetch, readSsePost } from '../lib/api';
 import { useApprovalsStore } from '../stores/approvals';
 import { sessionStatus } from '../lib/session-status';
 import { shortProject } from '../lib/project-name';
+import GuideCard from '../components/GuideCard.vue';
 
 defineOptions({ name: 'Sessions' });
 
 const router = useRouter();
 const approvals = useApprovalsStore();
 const sessions = ref<SessionSummary[]>([]);
+const unauthorized = ref(false);
 const openGroups = ref<string[]>([]);
 const agentText = ref('');
 let poll: ReturnType<typeof setInterval> | undefined;
@@ -32,9 +34,10 @@ async function refresh(): Promise<void> {
   const [sessionsRes, approvalsRes] = await Promise.all([
     apiFetch('/api/sessions'),
     apiFetch('/api/approvals'),
-  ]);
-  if (sessionsRes.ok) sessions.value = await sessionsRes.json();
-  if (approvalsRes.ok) {
+  ]).catch(() => [undefined, undefined] as const);
+  unauthorized.value = sessionsRes?.status === 401;
+  if (sessionsRes?.ok) sessions.value = await sessionsRes.json();
+  if (approvalsRes?.ok) {
     for (const request of (await approvalsRes.json())['approvals'] as ToolApprovalRequest[]) {
       approvals.ingest(request);
     }
@@ -94,7 +97,12 @@ onUnmounted(() => poll && clearInterval(poll));
       <h2>会话总览</h2>
       <Button size="small" @click="confirmAgent">agent 整理</Button>
     </div>
-    <PullRefresh :model-value="false" @update:model-value="refresh">
+    <GuideCard
+      v-if="unauthorized"
+      title="尚未授权"
+      description="先到「设置」页保存访问令牌，即可在这里查看所有会话"
+    />
+    <PullRefresh v-else :model-value="false" @update:model-value="refresh">
       <Collapse v-model="openGroups">
         <CollapseItem v-for="group in groups" :key="group.projectPath" :name="group.projectPath">
           <template #title>

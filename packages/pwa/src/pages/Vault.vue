@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router';
 import { Button, Cell, CellGroup, Field, NavBar, Search, showFailToast } from 'vant';
 import type { VaultNode, VaultSearchMatch } from '@ccferry/protocol';
 import NoteEditor from '../components/NoteEditor.vue';
+import GuideCard from '../components/GuideCard.vue';
 import { apiFetch } from '../lib/api';
 import { highlightSegments } from '../lib/highlight';
 import { debounce } from '../lib/debounce';
@@ -16,6 +17,7 @@ const names = ref<string[]>([]);
 const query = ref('');
 const matches = ref<VaultSearchMatch[] | null>(null);
 const editing = ref<string | null>(null);
+const unauthorized = ref(false);
 // Captured when opening a search hit so the note view can highlight terms.
 const matchQuery = ref('');
 const creating = ref(false);
@@ -27,11 +29,13 @@ const current = () => stack.value[stack.value.length - 1] ?? [];
 
 async function openRoot(): Promise<void> {
   const res = await apiFetch('/api/vault/tree');
+  unauthorized.value = res.status === 401;
   if (res.status === 503) {
     names.value = ['知识库（未配置）'];
     stack.value = [];
     return;
   }
+  if (!res.ok) return;
   const body = await res.json();
   stack.value = [body['tree'] as VaultNode[]];
   names.value = [];
@@ -110,7 +114,13 @@ onActivated(() => {
 <template>
   <div class="page">
     <NavBar :title="title" left-arrow fixed placeholder @click-left="back" />
-    <Search v-model="query" placeholder="搜索笔记" @update:model-value="runSearch" />
+    <GuideCard
+      v-if="unauthorized"
+      title="尚未授权"
+      description="先到「设置」页保存访问令牌，即可浏览你的知识库"
+    />
+    <template v-else>
+      <Search v-model="query" placeholder="搜索笔记" @update:model-value="runSearch" />
     <div v-if="creating" class="create-row">
       <Field v-model="newNotePath" placeholder="路径，如 工作日报/2026-09/新笔记.md" />
       <Button size="small" type="primary" @click="createNote">创建</Button>
@@ -141,6 +151,7 @@ onActivated(() => {
       </Cell>
     </CellGroup>
     <Button block plain type="primary" class="new-note" @click="creating = true">新建笔记</Button>
+    </template>
   </div>
 </template>
 

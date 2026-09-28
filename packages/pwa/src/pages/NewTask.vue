@@ -5,6 +5,7 @@ import { Button, Cell, CellGroup, Field, NavBar, Picker, Popup, showFailToast, s
 import { ApiError, apiFetch, readSsePost } from '../lib/api';
 import { awaitStart, waitForNewSession } from '../lib/new-task-start';
 import { shortProject } from '../lib/project-name';
+import GuideCard from '../components/GuideCard.vue';
 
 defineOptions({ name: 'NewTask' });
 
@@ -14,12 +15,21 @@ const sending = ref(false);
 const picking = ref(false);
 const projects = ref<Array<{ text: string; value: string }>>([]);
 const project = ref('');
+const unauthorized = ref(false);
 
 onMounted(async () => {
-  const res = await apiFetch('/api/projects');
-  if (res.ok) {
-    const body = (await res.json()) as { projects: Array<{ projectPath: string }> };
-    projects.value = body.projects.map((p) => ({ text: shortProject(p.projectPath), value: p.projectPath }));
+  try {
+    const res = await apiFetch('/api/projects');
+    if (res.status === 401) {
+      unauthorized.value = true;
+      return;
+    }
+    if (res.ok) {
+      const body = (await res.json()) as { projects: Array<{ projectPath: string }> };
+      projects.value = body.projects.map((p) => ({ text: shortProject(p.projectPath), value: p.projectPath }));
+    }
+  } catch {
+    // offline — the submit will surface the failure
   }
 });
 
@@ -63,6 +73,12 @@ async function start(): Promise<void> {
 <template>
   <div class="page">
     <NavBar title="新任务" fixed placeholder />
+    <GuideCard
+      v-if="unauthorized"
+      title="尚未授权"
+      description="先到「设置」页保存访问令牌，才能在这里创建新任务"
+    />
+    <template v-else>
     <CellGroup title="项目">
       <Cell title="选择项目" :value="project ? shortProject(project) : '未选择'" is-link @click="picking = true" />
     </CellGroup>
@@ -71,5 +87,6 @@ async function start(): Promise<void> {
     <Popup v-model:show="picking" position="bottom" round>
       <Picker :columns="projects" @confirm="confirmPick" @cancel="picking = false" />
     </Popup>
+    </template>
   </div>
 </template>

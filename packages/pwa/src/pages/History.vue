@@ -94,7 +94,7 @@ const runSearch = debounce(async () => {
       truncated.value = body.truncated;
       notice.value = '';
     } else {
-      notice.value = `搜索失败（${res.status}）`;
+      notice.value = res.status === 401 ? '尚未授权——请到「设置」页保存访问令牌' : `搜索失败（${res.status}）`;
     }
   } catch {
     if (seq === searchSeq) notice.value = '搜索失败，请检查网络';
