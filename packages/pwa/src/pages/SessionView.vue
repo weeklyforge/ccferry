@@ -5,6 +5,7 @@ import { Button, Field, showConfirmDialog } from 'vant';
 import type { ApprovalSettledFrame, ParsedLine, ToolApprovalRequest } from '@ccferry/protocol';
 import { ApiError, readSsePost, sseUrl } from '../lib/api';
 import { highlightKeywordsInElement, queryTerms } from '../lib/highlight';
+import { LineDedupe } from '../lib/line-dedupe';
 import { renderMarkdown } from '../lib/markdown';
 import { followSse } from '../lib/sse-follow';
 import { useApprovalsStore } from '../stores/approvals';
@@ -33,7 +34,12 @@ watch(bubbles, async () => {
   if (stream) highlightKeywordsInElement(stream, searchTerms);
 });
 
+// Replays after an SSE reconnect are skipped by line identity, so the view
+// keeps its content instead of clearing and redrawing every few seconds.
+const dedupe = new LineDedupe();
+
 function pushBubble(line: ParsedLine): void {
+  if (!dedupe.firstOf(line)) return;
   const bubble = parsedLineToBubble(line);
   if (bubble) bubbles.value.push(bubble);
   void nextTick(() => bottom.value?.scrollIntoView({ behavior: 'smooth' }));
@@ -89,13 +95,14 @@ const fullHistory = ref(false);
 function connectStream(): void {
   stream?.close();
   bubbles.value = [];
+  dedupe.reset();
   const tail = fullHistory.value ? '' : `&tailBytes=${TAIL_BYTES}`;
-  // followSse owns reconnection: a dropped tunnel must reset the view, not
-  // append a replayed copy of the tail the way EventSource auto-reconnect does.
+  // followSse owns reconnection. A reconnect replays the tailed window, but
+  // pushBubble's dedupe skips already-rendered lines — the view must NOT be
+  // cleared here or the content would flash on every drop.
   stream = followSse(sseUrl(`/api/sessions/${sessionId}/stream?fromStart=true${tail}`), {
     onLine: (data) => pushBubble(JSON.parse(data) as ParsedLine),
     onReset: () => {
-      bubbles.value = [];
       errors.value = [];
     },
   });
@@ -121,6 +128,7 @@ onUnmounted(() => {
   <div class="page session">
     <div class="stream">
       <div v-for="(bubble, i) in bubbles" :key="i" :class="['bubble', bubble?.kind === 'text' ? bubble.role : bubble?.kind]">
+        <span v-if="bubble && 'ts' in bubble && bubble.ts" class="bubble-ts">{{ bubble.ts }}</span>
         <!-- Assistant replies are markdown-heavy; render them. User input is
              conversational text and slash commands — keep it plain so it is
              never misparsed. -->
@@ -154,6 +162,7 @@ onUnmounted(() => {
 .bubble.user { background: #1989fa; color: white; }
 .bubble.tool { background: #fffbe8; font-size: 12px; }
 .bubble.raw { background: #f7f7f7; color: #969799; font-size: 12px; }
+.bubble-ts { float: right; margin-left: 8px; font-size: 11px; opacity: 0.55; }
 .error { color: var(--cc-danger); font-size: 12px; }
 .composer { display: flex; gap: 8px; padding: 8px; align-items: center; background: var(--cc-surface, #fff); }
 .composer :deep(.van-field) { flex: 1; }
