@@ -128,40 +128,39 @@ onActivated(() => {
     />
     <template v-else>
       <Search v-model="query" placeholder="搜索笔记" @update:model-value="runSearch" />
-    <div v-if="loading" class="loading-wrap">
-      <Loading size="24" vertical>加载中…</Loading>
-    </div>
-    <template v-else>
-    <div v-if="creating" class="create-row">
-      <Field v-model="newNotePath" placeholder="路径，如 工作日报/2026-09/新笔记.md" />
-      <Button size="small" type="primary" @click="createNote">创建</Button>
-    </div>
-    <NoteEditor v-if="editing !== null" :path="editing" :highlight-query="matchQuery" @close="editing = null" />
-    <CellGroup v-else-if="matches !== null">
-      <Cell
-        v-for="match in matches"
-        :key="match.path + match.line"
-        :title="match.path"
-        is-link
-        @click="openMatch(match)"
-      >
-        <!-- Segments (not v-html) keep arbitrary note text unescaped-safe. -->
-        <template #label>
-          <span class="match-line">{{ match.line }}:
-            <template v-for="(seg, i) in highlightSegments(match.text, query)" :key="i"><mark v-if="seg.hit">{{ seg.text }}</mark><template v-else>{{ seg.text }}</template></template>
-          </span>
-        </template>
-      </Cell>
-      <Cell v-if="matches.length === 0" title="（无结果）" />
-    </CellGroup>
-    <CellGroup v-else>
-      <Cell v-for="node in current()" :key="node.path" :title="node.name" :is-link="node.kind === 'dir'" @click="enter(node)">
-        <template #value>
-          <span v-if="node.kind === 'file'">{{ Math.ceil((node.sizeBytes ?? 0) / 1024) }}KB</span>
-        </template>
-      </Cell>
-    </CellGroup>
-    <Button block plain type="primary" class="new-note" @click="creating = true">新建笔记</Button>
+      <div v-if="loading" class="loading-wrap">
+        <Loading size="24" vertical>加载中…</Loading>
+      </div>
+      <div v-else-if="creating" class="create-row">
+        <Field v-model="newNotePath" placeholder="路径，如 工作日报/2026-09/新笔记.md" />
+        <Button size="small" type="primary" @click="createNote">创建</Button>
+      </div>
+      <NoteEditor v-else-if="editing !== null" :path="editing" :highlight-query="matchQuery" @close="editing = null" />
+      <CellGroup v-else-if="matches !== null">
+        <Cell
+          v-for="match in matches"
+          :key="match.path + match.line"
+          :title="match.path"
+          is-link
+          @click="openMatch(match)"
+        >
+          <!-- Segments (not v-html) keep arbitrary note text unescaped-safe. -->
+          <template #label>
+            <span class="match-line">{{ match.line }}:
+              <template v-for="(seg, i) in highlightSegments(match.text, query)" :key="i"><mark v-if="seg.hit">{{ seg.text }}</mark><template v-else>{{ seg.text }}</template></template>
+            </span>
+          </template>
+        </Cell>
+        <Cell v-if="matches.length === 0" title="（无结果）" />
+      </CellGroup>
+      <CellGroup v-else>
+        <Cell v-for="node in current()" :key="node.path" :title="node.name" :is-link="node.kind === 'dir'" @click="enter(node)">
+          <template #value>
+            <span v-if="node.kind === 'file'">{{ Math.ceil((node.sizeBytes ?? 0) / 1024) }}KB</span>
+          </template>
+        </Cell>
+      </CellGroup>
+      <Button block plain type="primary" class="new-note" @click="creating = true">新建笔记</Button>
     </template>
   </div>
 </template>
