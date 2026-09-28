@@ -5,15 +5,14 @@ import { describe, expect, it } from 'vitest';
 import GuideCard from './GuideCard.vue';
 
 describe('GuideCard', () => {
-  it('shows the title, description, and a settings button', () => {
+  it('shows the title and renders 「设置」 as an inline link, no button', () => {
     const wrapper = mount(GuideCard, {
-      props: { title: '尚未授权', description: '先去设置页保存访问令牌' },
+      props: { title: '尚未授权', description: '先到「设置」页保存访问令牌' },
       global: { plugins: [createPinia()] },
     });
     expect(wrapper.text()).toContain('尚未授权');
-    expect(wrapper.text()).toContain('先去设置页保存访问令牌');
-    const button = wrapper.find('button');
-    expect(button.exists()).toBe(true);
-    expect(button.text()).toContain('去设置令牌');
+    expect(wrapper.text()).toContain('先到');
+    expect(wrapper.find('.guide-link').text()).toBe('「设置」');
+    expect(wrapper.find('button').exists()).toBe(false);
   });
 });
