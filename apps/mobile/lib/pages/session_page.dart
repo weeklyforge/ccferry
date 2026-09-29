@@ -1,10 +1,16 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:ccferry_mobile/net/api_client.dart';
+import 'package:ccferry_mobile/net/follow.dart';
 import 'package:ccferry_mobile/session/bubbles.dart';
 import 'package:ccferry_mobile/session/sender.dart';
 import 'package:ccferry_mobile/session/stream_model.dart';
+import 'package:ccferry_mobile/state/approvals_model.dart';
+import 'package:ccferry_mobile/widgets/approval_card.dart';
 import 'package:ccferry_mobile/widgets/bubble_view.dart';
 
 class SessionPage extends StatefulWidget {
@@ -20,6 +26,7 @@ class _SessionPageState extends State<SessionPage> {
   final ScrollController _scroll = ScrollController();
   final TextEditingController _input = TextEditingController();
   SessionSender? _sender;
+  FollowHandle? _approvalsHandle;
 
   @override
   void initState() {
@@ -28,6 +35,7 @@ class _SessionPageState extends State<SessionPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<SessionStreamModel>().start(sessionId: widget.sessionId);
+      _listenApprovals();
       setState(() {
         _sender = SessionSender(
           client: context.read<ApiClient>(),
@@ -35,6 +43,30 @@ class _SessionPageState extends State<SessionPage> {
         );
       });
     });
+  }
+
+  // Live approvals: request frames ingest, settled frames drop the card.
+  // Cards whose session is null (global) or matches this session show here.
+  void _listenApprovals() {
+    final client = context.read<ApiClient>();
+    final approvals = context.read<ApprovalsModel>();
+    _approvalsHandle = followSse(
+      connect: () => client.sseGet('/api/approvals/stream'),
+      onLine: (data) {
+        try {
+          final frame = jsonDecode(data) as Map<String, dynamic>;
+          if (frame['toolName'] != null) {
+            final sessionId = frame['sessionId'] as String?;
+            if (sessionId != null && sessionId != widget.sessionId) return;
+          }
+          approvals.handleFrame(frame);
+        } catch (_) {
+          // malformed frame — ignore
+        }
+      },
+      onReset: () {},
+      delay: (d) => Future<void>.delayed(d),
+    );
   }
 
   Future<void> _send() async {
@@ -67,17 +99,23 @@ class _SessionPageState extends State<SessionPage> {
   void dispose() {
     _scroll.dispose();
     _input.dispose();
+    _approvalsHandle?.close();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final model = context.watch<SessionStreamModel>();
+    final approvals = context.watch<ApprovalsModel>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
         _scroll.jumpTo(_scroll.position.maxScrollExtent);
       }
     });
+
+    final visibleApprovals = approvals.pending
+        .where((p) => p.sessionId == null || p.sessionId == widget.sessionId)
+        .toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('会话')),
@@ -87,14 +125,23 @@ class _SessionPageState extends State<SessionPage> {
             child: ListView.builder(
               controller: _scroll,
               padding: const EdgeInsets.all(12),
-              itemCount: model.bubbles.length + (model.fullHistory ? 0 : 1),
+              itemCount:
+                  model.bubbles.length + visibleApprovals.length + (model.fullHistory ? 0 : 1),
               itemBuilder: (context, i) {
                 if (i == model.bubbles.length) {
-                  return TextButton(
-                    onPressed: model.loadFullHistory,
-                    child: const Text('加载全部历史'),
+                  return Column(
+                    children: [
+                      for (final request in visibleApprovals)
+                        ApprovalCard(request: request),
+                      if (!model.fullHistory)
+                        TextButton(
+                          onPressed: model.loadFullHistory,
+                          child: const Text('加载全部历史'),
+                        ),
+                    ],
                   );
                 }
+                if (i > model.bubbles.length) return const SizedBox.shrink();
                 final bubble = model.bubbles[i];
                 final id = bubble is ToolBubble ? bubble.toolUseId : null;
                 final result = id == null ? null : model.toolResults[id];

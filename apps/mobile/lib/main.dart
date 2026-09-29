@@ -66,6 +66,7 @@ class _CcferryAppState extends State<CcferryApp> {
             builder: (ctx) => MultiProvider(
               providers: [
                 Provider<ApiClient>.value(value: _client!),
+                ChangeNotifierProvider<ApprovalsModel>.value(value: _approvals!),
                 ChangeNotifierProvider<SessionStreamModel>(
                   create: (_) => SessionStreamModel(connect: _client!.sseGet),
                 ),

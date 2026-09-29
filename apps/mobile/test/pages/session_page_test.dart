@@ -1,5 +1,7 @@
 
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -8,23 +10,32 @@ import 'package:provider/provider.dart';
 import 'package:ccferry_mobile/net/api_client.dart';
 import 'package:ccferry_mobile/pages/session_page.dart';
 import 'package:ccferry_mobile/session/stream_model.dart';
+import 'package:ccferry_mobile/state/approvals_model.dart';
 
 import '../session/stream_model_test.dart' show FakeSource;
 
-// The page reads ApiClient from the tree for its composer.
-Widget harness(SessionStreamModel model) => MultiProvider(
-      providers: [
-        Provider<ApiClient>.value(
-          value: ApiClient(
-            client: MockClient((r) async => http.Response('', 200)),
-            base: () => Uri.parse('https://x'),
-            token: () => 't',
-          ),
-        ),
-        ChangeNotifierProvider<SessionStreamModel>.value(value: model),
-      ],
-      child: const MaterialApp(home: SessionPage(sessionId: 's1')),
-    );
+// The page reads ApiClient from the tree for its composer and follows the
+// approvals stream. The client's GET streams never complete (like live SSE),
+// so fake_async sees no pending reconnect timers at test end.
+Widget harness(SessionStreamModel model) {
+  final client = ApiClient(
+    client: MockClient.streaming((req, body) async {
+      final controller = StreamController<List<int>>();
+      // Body stays open — tearing the widget tree down cancels the streams.
+      return http.StreamedResponse(controller.stream, 200);
+    }),
+    base: () => Uri.parse('https://x'),
+    token: () => 't',
+  );
+  return MultiProvider(
+    providers: [
+      Provider<ApiClient>.value(value: client),
+      ChangeNotifierProvider<ApprovalsModel>.value(value: ApprovalsModel(client: client)),
+      ChangeNotifierProvider<SessionStreamModel>.value(value: model),
+    ],
+    child: const MaterialApp(home: SessionPage(sessionId: 's1')),
+  );
+}
 
 void main() {
   testWidgets('renders bubbles, tool status, and expandable results', (tester) async {
