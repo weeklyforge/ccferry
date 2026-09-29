@@ -36,7 +36,7 @@ class TextBlock extends ContentBlock {
 
 class ToolUseBlock extends ContentBlock {
   const ToolUseBlock(this.id, this.name, this.input);
-  final String id;
+  final String? id; // optional — matches the pwa renderer (name is required)
   final String name;
   final Map<String, dynamic> input;
 }
@@ -64,11 +64,12 @@ List<ContentBlock> contentBlocks(Map<String, dynamic> json) {
         final text = block['text'];
         if (text is String) out.add(TextBlock(text));
       case 'tool_use':
-        final id = block['id'];
         final name = block['name'];
-        if (id is String && name is String) {
+        if (name is String) {
           out.add(ToolUseBlock(
-              id, name, (block['input'] as Map?)?.cast<String, dynamic>() ?? {}));
+              block['id'] as String?,
+              name,
+              (block['input'] as Map?)?.cast<String, dynamic>() ?? {}));
         }
       case 'tool_result':
         final id = block['tool_use_id'];
