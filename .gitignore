@@ -6,3 +6,6 @@ coverage/
 .env.*
 .claude/
 .idea/
+
+# superpowers worktrees
+.worktrees/
