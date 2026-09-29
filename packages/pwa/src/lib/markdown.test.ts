@@ -11,6 +11,19 @@ describe('renderMarkdown', () => {
     expect(renderMarkdown('```\nconst x = 1;\n```')).toContain('<pre><code');
   });
 
+  it('highlights fenced code with a known language', () => {
+    const html = renderMarkdown('```typescript\nconst x = 1;\n```');
+    expect(html).toContain('hljs language-typescript');
+    expect(html).toContain('hljs-keyword');
+  });
+
+  it('renders unknown languages as escaped plain code', () => {
+    const html = renderMarkdown('```notalang\nfoo <b>bar</b>\n```');
+    expect(html).toContain('<pre><code');
+    expect(html).toContain('&lt;b&gt;');
+    expect(html).not.toContain('<b>');
+  });
+
   it('renders wikilinks as highlighted spans without brackets', () => {
     const html = renderMarkdown('see [[开发项目图谱]] here');
     expect(html).toContain('<span class="wikilink">开发项目图谱</span>');
