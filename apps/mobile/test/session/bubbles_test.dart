@@ -117,4 +117,14 @@ void main() {
     expect(fmtTime(DateTime(2026, 9, 1, 8, 5).toIso8601String(), now), '09-01 08:05');
     expect(fmtTime('not-a-date', now), '');
   });
+
+  test('fmtTime renders Z-suffixed (UTC) timestamps in local wall clock', () {
+    // Session lines carry Z-suffixed ISO; DateTime.tryParse keeps them UTC and
+    // the label must be the local wall clock (the pwa uses getHours()).
+    final utcNow = DateTime.utc(2026, 9, 29, 10, 0);
+    final localNow = utcNow.toLocal();
+    final expected =
+        '${localNow.hour.toString().padLeft(2, '0')}:${localNow.minute.toString().padLeft(2, '0')}';
+    expect(fmtTime(utcNow.toIso8601String(), localNow), expected);
+  });
 }

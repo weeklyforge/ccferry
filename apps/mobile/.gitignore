@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Owner-provided firebase / signing material — NEVER commit (spec 7 key discipline)
+# placed manually on this machine and injected via CI secrets
+google-services.json
+**/GoogleService-Info.plist
+private_auth_keys/
+*.p8
+*service-account*.json

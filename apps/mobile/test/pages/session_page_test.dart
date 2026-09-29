@@ -98,5 +98,22 @@ void main() {
 
     model.close();
   });
+
+  testWidgets('composer clears on send', (tester) async {
+    final source = FakeSource([
+      '{"uuid":"u1","type":"user","message":{"content":"hi"}}',
+    ]);
+    final model = SessionStreamModel(connect: source.connectOpen);
+
+    await tester.pumpWidget(harness(model));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.enterText(find.widgetWithText(TextField, '续聊…'), 'hello there');
+    await tester.tap(find.text('发送'));
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(find.widgetWithText(TextField, 'hello there'), findsNothing);
+
+    model.close();
+  });
 }
 

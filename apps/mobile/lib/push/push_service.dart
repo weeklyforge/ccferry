@@ -27,8 +27,17 @@ class PushService {
 
   bool subscribed = false;
   bool _firebaseReady = false;
+  bool _bootstrapComplete = false;
+  bool _wired = false;
   String? _lastToken;
-  final List<void Function(String sessionId)> _tapHandlers = [];
+  void Function(String sessionId)? _go;
+
+  /// True once the tap-listener setup has run to completion (after a
+  /// successful bootstrap). The app may call [onTap] before or after
+  /// [bootstrap] — wiring happens inside bootstrap, exactly once. On the
+  /// test seam (injected token source) there is no real FCM to attach, but
+  /// the wiring step itself is still exercised.
+  bool get listenersWired => _wired;
 
   /// Real token source; overridden in tests.
   Future<String?> defaultGetToken() => FirebaseMessaging.instance.getToken();
@@ -63,25 +72,36 @@ class PushService {
     });
     _lastToken = token;
     subscribed = true;
+    _bootstrapComplete = true;
+    _wireListeners();
   }
 
-  /// Registers the tap handler; the FCM entry points call [handleTap] for
-  /// both cold start (getInitialMessage) and warm taps (onMessageOpenedApp).
-  void onTap(void Function(String sessionId) go) {
-    _tapHandlers.add(go);
-    if (!_firebaseReady) return; // test seam or push-less build — nothing to wire
+  // Attaches the FCM entry points exactly once, after bootstrap completed.
+  // Wiring before bootstrap (or from a retry path) must not stack handlers —
+  // that was a real review finding: onTap ran first, bounced off the
+  // not-ready guard, and tap-through never got wired at all.
+  void _wireListeners() {
+    if (_wired || !_bootstrapComplete) return;
+    _wired = true;
+    if (!_firebaseReady) return; // test seam or push-less build — no real FCM
     FirebaseMessaging.instance.getInitialMessage().then((message) {
       if (message != null) _dispatch(message.data);
     });
     FirebaseMessaging.onMessageOpenedApp.listen((message) => _dispatch(message.data));
   }
 
+  /// Registers the tap callback (replaces any previous one — retry paths
+  /// must not stack handlers). Cold and warm taps both land in [handleTap].
+  void onTap(void Function(String sessionId) go) {
+    _go = go;
+    _wireListeners();
+  }
+
   void _dispatch(Map<String, dynamic> data) {
     final sessionId = data['sessionId'];
     if (sessionId is String) {
-      for (final handler in _tapHandlers) {
-        handler(sessionId);
-      }
+      final go = _go;
+      if (go != null) go(sessionId);
     }
   }
 

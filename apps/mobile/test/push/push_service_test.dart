@@ -77,4 +77,23 @@ void main() {
     service.handleTap({'kind': 'approval'}); // no session — ignored
     expect(seen, ['s42']);
   });
+
+  test('bootstrap wires listeners exactly once regardless of onTap order', () async {
+    final seen = <String>[];
+    final service = PushService(
+      client: clientRecording([]),
+      clientId: 'c1',
+      platform: 'ios',
+      getToken: () async => 'fcm-token-1',
+    );
+    // The app calls onTap before bootstrap (main.dart wiring order).
+    service.onTap(seen.add);
+    expect(service.listenersWired, isFalse);
+    await service.bootstrap();
+    expect(service.listenersWired, isTrue);
+    // A retry path calling onTap again must not stack handlers.
+    service.onTap(seen.add);
+    service.handleTap({'sessionId': 's1'});
+    expect(seen, ['s1']);
+  });
 }

@@ -73,6 +73,11 @@ class _SessionPageState extends State<SessionPage> {
     final sender = _sender;
     if (sender == null) return;
     final text = _input.text;
+    if (text.trim().isEmpty) return;
+    // Mirror the pwa: cleared before the FIRST attempt, so a successful send
+    // never leaves the text around for an accidental duplicate.
+    _input.clear();
+    setState(() {});
     await sender.send(
       text,
       confirmForce: () async {
@@ -86,7 +91,6 @@ class _SessionPageState extends State<SessionPage> {
             ],
           ),
         );
-        if (ok == true) _input.clear();
         return ok == true;
       },
     );

@@ -4,8 +4,9 @@ import 'package:ccferry_mobile/protocol/events.dart';
 
 // Local wall-clock label for the bubble: HH:mm today, MM-dd HH:mm otherwise.
 String fmtTime(String iso, DateTime now) {
-  final d = DateTime.tryParse(iso);
+  var d = DateTime.tryParse(iso);
   if (d == null) return '';
+  if (d.isUtc) d = d.toLocal(); // session lines are Z-suffixed; label local
   final hh = d.hour.toString().padLeft(2, '0');
   final mm = d.minute.toString().padLeft(2, '0');
   final sameDay =
