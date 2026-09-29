@@ -96,7 +96,7 @@ FCM 推送 ←—— cloud 新增 native-sender（FCM HTTP v1）
 **单通道**：`firebase_messaging`（FlutterFire），iOS 经 Firebase 代理到 APNs，安卓走 FCM——iOS 无需自对接 APNs HTTP/2。
 
 - 注册：app 启动 → 请求通知权限 → `getToken` → `POST /api/push/native/subscribe`（upsert；token 轮换在下次启动自然纠正）
-- 云端新增 `push/native-sender.ts`：`firebase-admin` SDK（官方维护）发 FCM HTTP v1；订阅存储 `push-subscriptions.json` 条目加 `type` 字段（`web` 存量条目不动）
+- 云端新增 `push/native-sender.ts`：`firebase-admin` SDK（官方维护）发 FCM HTTP v1；FCM 订阅独立存 `fcm-subscriptions.json`（同款原子写模式）——web 侧 store/文件/代码路径字节不动
 - 判定/抑制复用现有 PushSource 规则（TUI 完成、审批请求；前台/已读不重复推）
 - 通知载荷：`{sessionId, kind}` + 标题/正文；点击 → 冷/热启动两条路径都路由到 `/session/:id`
 - 清理：FCM 返回 UNREGISTERED/INVALID → 删订阅（同 web-push 现有逻辑）
