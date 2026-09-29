@@ -26,7 +26,10 @@ void main() {
       retryMs: const Duration(seconds: 2),
       maxRetryMs: const Duration(seconds: 30),
     );
-    await Future<void>.delayed(const Duration(milliseconds: 50));
+    // Generous wall time: the suite runs test files in parallel isolates and
+    // a tight window flakes under load. The first five waits are the
+    // deterministic backoff ladder regardless of timing.
+    await Future<void>.delayed(const Duration(milliseconds: 500));
     handle.close();
     // 5 failures → 2s, 4s, 8s, 16s, 30s (cap). After the success the follower
     // keeps following (a clean stream end reconnects too — the server keeps
