@@ -1,4 +1,6 @@
 import type { EventBuffer } from '../events/buffer';
+import type { FcmStore, FcmSubscription } from './fcm-store';
+import { isInvalidFcmToken } from './fcm-sender';
 import type { PushSubscription, SubscriptionStore } from './store';
 
 export interface PushPayload {
@@ -8,10 +10,16 @@ export interface PushPayload {
   force?: boolean;
 }
 
+export interface NativePushOptions {
+  store: FcmStore;
+  send: (sub: FcmSubscription, payload: string) => Promise<void>;
+}
+
 export interface PushSenderOptions {
   store: SubscriptionStore;
   send: (sub: PushSubscription, payload: string) => Promise<void>;
   isForeground: (clientId: string) => boolean;
+  native?: NativePushOptions; // FCM subscribers — omitted when not configured
   log?: (message: string) => void;
 }
 
@@ -64,10 +72,11 @@ export async function sendTestPush(buffer: EventBuffer): Promise<void> {
 }
 
 async function deliver(opts: PushSenderOptions, payload: PushPayload): Promise<void> {
+  const body = JSON.stringify(payload);
   for (const sub of opts.store.list()) {
     if (!payload.force && opts.isForeground(sub.clientId)) continue;
     try {
-      await opts.send(sub, JSON.stringify(payload));
+      await opts.send(sub, body);
     } catch (error) {
       const status = (error as { statusCode?: number }).statusCode;
       if (status === 410) {
@@ -75,6 +84,21 @@ async function deliver(opts: PushSenderOptions, payload: PushPayload): Promise<v
         opts.log?.(`push subscription removed (410): ${sub.endpoint}`);
       } else {
         opts.log?.(`push send failed: ${String(error)}`); // transient — next event retries
+      }
+    }
+  }
+  const native = opts.native;
+  if (!native) return;
+  for (const sub of native.store.list()) {
+    if (!payload.force && opts.isForeground(sub.clientId)) continue;
+    try {
+      await native.send(sub, body);
+    } catch (error) {
+      if (isInvalidFcmToken(error)) {
+        await native.store.remove(sub.token); // app uninstalled / token rotated out
+        opts.log?.(`fcm subscription removed (unregistered): ${sub.token}`);
+      } else {
+        opts.log?.(`fcm send failed: ${String(error)}`);
       }
     }
   }

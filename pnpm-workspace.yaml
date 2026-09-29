@@ -1,2 +1,7 @@
 packages:
   - packages/*
+minimumReleaseAge: 1440
+allowBuilds:
+  '@firebase/util': true
+  esbuild: true
+  protobufjs: true

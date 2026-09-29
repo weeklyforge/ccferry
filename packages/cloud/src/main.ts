@@ -18,8 +18,9 @@ const vapid =
     : null;
 console.log(vapid ? 'push: enabled' : 'push: disabled (no VAPID keys)');
 const subscriptionsPath = process.env['CCFERRY_PUSH_SUBS'] ?? null;
+const fcmSubscriptionsPath = process.env['CCFERRY_FCM_SUBS'] ?? null;
 
-const app = await buildCloudApp({ tunnelToken, phoneToken, pwaDir, vapid, subscriptionsPath });
+const app = await buildCloudApp({ tunnelToken, phoneToken, pwaDir, vapid, subscriptionsPath, fcmSubscriptionsPath });
 app
   .listen({ port, host: '127.0.0.1' })
   .then(() => console.log(`ccferry-cloud listening on 127.0.0.1:${port} (behind Caddy)`))

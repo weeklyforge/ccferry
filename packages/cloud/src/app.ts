@@ -7,8 +7,11 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { FrameType } from '@ccferry/protocol/src/frame';
 import { createPhoneAuthHook } from './auth';
 import { EventBuffer } from './events/buffer';
+import { registerFcmRoutes } from './api/fcm-routes';
 import { registerPushRoutes } from './api/push-routes';
 import { attachPushSender, sendTestPush } from './push/sender';
+import { createFcmSender } from './push/fcm-sender';
+import { FcmStore } from './push/fcm-store';
 import { SubscriptionStore, type PushSubscription } from './push/store';
 import { startSseLike } from './sse';
 import { StreamRouter } from './tunnel/stream-router';
@@ -23,6 +26,7 @@ export interface CloudAppOptions {
   pwaDir?: string | null;
   vapid?: { publicKey: string; privateKey: string; subject: string } | null;
   subscriptionsPath?: string | null;
+  fcmSubscriptionsPath?: string | null;
 }
 
 export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInstance> {
@@ -39,6 +43,15 @@ export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInsta
   const sseClients = new Set<string>();
   const store = new SubscriptionStore(opts.subscriptionsPath ?? null);
   await store.load();
+  const fcmStore = new FcmStore(opts.fcmSubscriptionsPath ?? null);
+  await fcmStore.load();
+  const fcmAccountPath = process.env['FCM_SERVICE_ACCOUNT'] ?? null;
+  const native = fcmAccountPath
+    ? {
+        store: fcmStore,
+        send: await createFcmSender(fcmAccountPath),
+      }
+    : undefined; // native push not configured — route 503s, web path unaffected
   const send = opts.vapid
     ? async (sub: PushSubscription, payload: string): Promise<void> => {
         const { sendNotification } = await import('web-push');
@@ -51,6 +64,7 @@ export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInsta
     store,
     send,
     isForeground: (clientId) => sseClients.has(clientId),
+    native,
     log: (message) => app.log.info(`push: ${message}`),
   });
   registerPushRoutes(app, {
@@ -58,6 +72,7 @@ export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInsta
     publicKey: opts.vapid?.publicKey ?? null,
     sendTest: () => sendTestPush(events),
   });
+  registerFcmRoutes(app, { store: fcmStore, ready: Boolean(native) });
 
   tunnel.attach(app); // registers GET /tunnel as the websocket route
 
