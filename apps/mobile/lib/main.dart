@@ -63,8 +63,13 @@ class _CcferryAppState extends State<CcferryApp> {
           final sessionId = settings.arguments as String;
           return MaterialPageRoute<void>(
             settings: settings,
-            builder: (ctx) => ChangeNotifierProvider<SessionStreamModel>(
-              create: (_) => SessionStreamModel(connect: _client!.sseGet),
+            builder: (ctx) => MultiProvider(
+              providers: [
+                Provider<ApiClient>.value(value: _client!),
+                ChangeNotifierProvider<SessionStreamModel>(
+                  create: (_) => SessionStreamModel(connect: _client!.sseGet),
+                ),
+              ],
               child: SessionPage(sessionId: sessionId),
             ),
           );
@@ -93,6 +98,7 @@ class _CcferryAppState extends State<CcferryApp> {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthModel>.value(value: _auth),
+        Provider<ApiClient>.value(value: _client!),
         ChangeNotifierProvider<ApprovalsModel>.value(value: _approvals!),
         ChangeNotifierProvider<SessionsModel>.value(value: _sessions!),
       ],

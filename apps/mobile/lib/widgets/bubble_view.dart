@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:ccferry_mobile/session/bubbles.dart';
+import 'package:ccferry_mobile/widgets/markdown_body.dart';
 
 // One chat bubble. Assistant text stays plain in this widget — the session
 // page swaps in the markdown body (Task 10); user/tool/raw are never parsed.
@@ -13,6 +14,7 @@ class BubbleView extends StatelessWidget {
     required this.hasResult,
     required this.expanded,
     required this.onToggleTool,
+    this.markdown = false,
   });
 
   final Bubble bubble;
@@ -21,6 +23,7 @@ class BubbleView extends StatelessWidget {
   final bool resultError;
   final bool expanded;
   final VoidCallback? onToggleTool;
+  final bool markdown; // assistant bubbles render markdown (Task 10)
 
   @override
   Widget build(BuildContext context) {
@@ -36,10 +39,13 @@ class BubbleView extends StatelessWidget {
             color: bubble.role == 'user' ? Colors.blue : const Color(0xFFF2F3F5),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            bubble.text,
-            style: TextStyle(color: bubble.role == 'user' ? Colors.white : Colors.black87),
-          ),
+          child: markdown
+              ? MarkdownBody(text: bubble.text)
+              : Text(
+                  bubble.text,
+                  style: TextStyle(
+                      color: bubble.role == 'user' ? Colors.white : Colors.black87),
+                ),
         ),
       );
     }

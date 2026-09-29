@@ -2,11 +2,29 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
+import 'package:ccferry_mobile/net/api_client.dart';
 import 'package:ccferry_mobile/pages/session_page.dart';
 import 'package:ccferry_mobile/session/stream_model.dart';
 
 import '../session/stream_model_test.dart' show FakeSource;
+
+// The page reads ApiClient from the tree for its composer.
+Widget harness(SessionStreamModel model) => MultiProvider(
+      providers: [
+        Provider<ApiClient>.value(
+          value: ApiClient(
+            client: MockClient((r) async => http.Response('', 200)),
+            base: () => Uri.parse('https://x'),
+            token: () => 't',
+          ),
+        ),
+        ChangeNotifierProvider<SessionStreamModel>.value(value: model),
+      ],
+      child: const MaterialApp(home: SessionPage(sessionId: 's1')),
+    );
 
 void main() {
   testWidgets('renders bubbles, tool status, and expandable results', (tester) async {
@@ -18,12 +36,7 @@ void main() {
     ]);
     final model = SessionStreamModel(connect: source.connectOpen);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<SessionStreamModel>.value(
-        value: model,
-        child: const MaterialApp(home: SessionPage(sessionId: 's1')),
-      ),
-    );
+    await tester.pumpWidget(harness(model));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('fix the login'), findsOneWidget);
@@ -47,12 +60,7 @@ void main() {
     ]);
     final model = SessionStreamModel(connect: source.connectOpen);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<SessionStreamModel>.value(
-        value: model,
-        child: const MaterialApp(home: SessionPage(sessionId: 's1')),
-      ),
-    );
+    await tester.pumpWidget(harness(model));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('⏳'), findsOneWidget);
@@ -69,12 +77,7 @@ void main() {
     ]);
     final model = SessionStreamModel(connect: source.connectOpen);
 
-    await tester.pumpWidget(
-      ChangeNotifierProvider<SessionStreamModel>.value(
-        value: model,
-        child: const MaterialApp(home: SessionPage(sessionId: 's1')),
-      ),
-    );
+    await tester.pumpWidget(harness(model));
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('加载全部历史'), findsOneWidget);
