@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:ccferry_mobile/net/api_client.dart';
+import 'package:ccferry_mobile/net/follow.dart';
 import 'package:ccferry_mobile/session/session_status.dart';
 import 'package:ccferry_mobile/state/approvals_model.dart';
+import 'package:ccferry_mobile/state/auth_model.dart';
 import 'package:ccferry_mobile/state/sessions_model.dart';
 
 String _relative(int ms, DateTime now) {
@@ -23,6 +26,7 @@ class SessionsPage extends StatefulWidget {
 
 class _SessionsPageState extends State<SessionsPage> {
   Timer? _poll;
+  FollowHandle? _eventsHandle;
 
   @override
   void initState() {
@@ -33,11 +37,30 @@ class _SessionsPageState extends State<SessionsPage> {
     _poll = Timer.periodic(const Duration(seconds: 10), (_) {
       if (mounted) context.read<SessionsModel>().refresh();
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _listenEvents();
+    });
+  }
+
+  // The events stream does two jobs: instant list refresh on session events,
+  // and — just by being open — it marks this clientId foreground on the
+  // cloud, which is what suppresses duplicate native pushes.
+  void _listenEvents() {
+    final client = context.read<ApiClient>();
+    final clientId = context.read<AuthModel>().clientId;
+    final model = context.read<SessionsModel>();
+    _eventsHandle = followSse(
+      connect: () => client.sseGet('/api/events/stream?clientId=${Uri.encodeQueryComponent(clientId ?? '')}'),
+      onLine: (_) => model.refresh(),
+      onReset: () {},
+      delay: (d) => Future<void>.delayed(d),
+    );
   }
 
   @override
   void dispose() {
     _poll?.cancel();
+    _eventsHandle?.close();
     super.dispose();
   }
 

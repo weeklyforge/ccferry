@@ -4,6 +4,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// google-services.json is owner-provided and NEVER committed (spec §7): the
+// plugin applies only when the file is present, so machines and CI runners
+// without it still build a working app (push simply stays off).
+val googleServicesFile = file("google-services.json")
+if (googleServicesFile.exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 android {
     namespace = "com.fetaoily.ccferry_mobile"
     compileSdk = flutter.compileSdkVersion

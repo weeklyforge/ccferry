@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,61 +10,71 @@ import 'package:ccferry_mobile/net/api_client.dart';
 import 'package:ccferry_mobile/pages/sessions_page.dart';
 import 'package:ccferry_mobile/protocol/events.dart';
 import 'package:ccferry_mobile/state/approvals_model.dart';
+import 'package:ccferry_mobile/state/auth_model.dart';
+import 'package:ccferry_mobile/state/secure_store.dart';
 import 'package:ccferry_mobile/state/sessions_model.dart';
 
-ApiFunction clientOf = (_) async => http.Response(jsonEncode([]), 200);
-typedef ApiFunction = Future<http.Response> Function(http.Request r);
+class MemoryStore implements SecureStore {
+  final values = <String, String>{};
+  @override
+  Future<String?> read(String key) async => values[key];
+  @override
+  Future<void> write(String key, String value) async => values[key] = value;
+}
 
-ApiClient clientWith(ApiFunction fn) =>
-    ApiClient(client: MockClient((r) async => fn(r)), base: () => Uri.parse('https://x'), token: () => 't');
-
-Future<SessionsModel> modelWith({
-  required ApprovalsModel approvals,
-  required void Function(int) onLoad,
-}) async {
-  final model = SessionsModel(
-    client: clientWith((r) async {
-      onLoad(1);
-      if (r.url.path == '/api/sessions') {
-        return http.Response(
-          jsonEncode([
-            {
-              'sessionId': 'a',
-              'projectPath': r'D:\work\pkg',
-              'file': 'a.jsonl',
-              'sizeBytes': 1,
-              'lastModifiedMs': DateTime.now().millisecondsSinceEpoch,
-              'firstUserText': 'fix login',
-            },
-          ]),
+// Routed fake: JSON for the list/approval GETs, a never-completing body for
+// the events stream (fake_async flags pending reconnect timers otherwise).
+ApiClient routedClient({required void Function(int) onLoad}) => ApiClient(
+      client: MockClient.streaming((req, _) async {
+        if (req.url.path == '/api/events/stream') {
+          return http.StreamedResponse(StreamController<List<int>>().stream, 200);
+        }
+        if (req.url.path == '/api/sessions') {
+          onLoad(1);
+          return http.StreamedResponse(
+            Stream.value(utf8.encode(jsonEncode([
+              {
+                'sessionId': 'a',
+                'projectPath': r'D:\work\pkg',
+                'file': 'a.jsonl',
+                'sizeBytes': 1,
+                'lastModifiedMs': DateTime.now().millisecondsSinceEpoch,
+                'firstUserText': 'fix login',
+              },
+            ]))),
+            200,
+          );
+        }
+        return http.StreamedResponse(
+          Stream.value(utf8.encode(jsonEncode({'approvals': []}))),
           200,
         );
-      }
-      return http.Response(jsonEncode({'approvals': []}), 200);
-    }),
-    approvals: approvals,
-  );
-  return model;
-}
+      }),
+      base: () => Uri.parse('https://x'),
+      token: () => 't',
+    );
+
+Widget harness({required ApprovalsModel approvals, required SessionsModel model, ApiClient? client}) =>
+    MultiProvider(
+      providers: [
+        Provider<ApiClient>.value(value: client!),
+        ChangeNotifierProvider<AuthModel>.value(value: AuthModel(store: MemoryStore())),
+        ChangeNotifierProvider<ApprovalsModel>.value(value: approvals),
+        ChangeNotifierProvider<SessionsModel>.value(value: model),
+      ],
+      child: const MaterialApp(home: SessionsPage()),
+    );
 
 void main() {
   testWidgets('renders grouped sessions with status and relative time', (tester) async {
-    final approvals = ApprovalsModel(
-      client: clientWith((_) async => http.Response('', 204)),
-    );
+    var loads = 0;
+    final client = routedClient(onLoad: (n) => loads += n);
+    final approvals = ApprovalsModel(client: client);
     approvals.ingest(ToolApprovalRequest.fromJson(approvalFor('a')));
-    final model = await modelWith(approvals: approvals, onLoad: (_) {});
+    final model = SessionsModel(client: client, approvals: approvals);
     await model.refresh();
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<ApprovalsModel>.value(value: approvals),
-          ChangeNotifierProvider<SessionsModel>.value(value: model),
-        ],
-        child: const MaterialApp(home: SessionsPage()),
-      ),
-    );
+    await tester.pumpWidget(harness(approvals: approvals, model: model, client: client));
     await tester.pumpAndSettle();
 
     expect(find.text('pkg'), findsOneWidget);
@@ -74,20 +85,11 @@ void main() {
 
   testWidgets('polls refresh every 10 seconds while visible', (tester) async {
     var loads = 0;
-    final approvals = ApprovalsModel(
-      client: clientWith((_) async => http.Response('', 204)),
-    );
-    final model = await modelWith(approvals: approvals, onLoad: (n) => loads += n);
+    final client = routedClient(onLoad: (n) => loads += n);
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
 
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<ApprovalsModel>.value(value: approvals),
-          ChangeNotifierProvider<SessionsModel>.value(value: model),
-        ],
-        child: const MaterialApp(home: SessionsPage()),
-      ),
-    );
+    await tester.pumpWidget(harness(approvals: approvals, model: model, client: client));
     await tester.pumpAndSettle();
     final afterFirst = loads;
     await tester.pump(const Duration(seconds: 10));

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:http/io_client.dart';
 import 'package:provider/provider.dart';
@@ -6,6 +8,7 @@ import 'package:ccferry_mobile/net/api_client.dart';
 import 'package:ccferry_mobile/pages/login_page.dart';
 import 'package:ccferry_mobile/pages/session_page.dart';
 import 'package:ccferry_mobile/pages/sessions_page.dart';
+import 'package:ccferry_mobile/push/push_service.dart';
 import 'package:ccferry_mobile/session/stream_model.dart';
 import 'package:ccferry_mobile/state/approvals_model.dart';
 import 'package:ccferry_mobile/state/auth_model.dart';
@@ -29,10 +32,13 @@ class CcferryApp extends StatefulWidget {
 
 class _CcferryAppState extends State<CcferryApp> {
   late final AuthModel _auth = widget.auth ?? AuthModel(store: const SecureTokenStore());
+  final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
   ApiClient? _client;
   ApprovalsModel? _approvals;
   SessionsModel? _sessions;
+  PushService? _push;
   bool _booted = false;
+  bool _pushBooted = false;
 
   @override
   void initState() {
@@ -51,13 +57,30 @@ class _CcferryAppState extends State<CcferryApp> {
     );
     _approvals = ApprovalsModel(client: _client!);
     _sessions = SessionsModel(client: _client!, approvals: _approvals!);
+    _push = PushService(client: _client!, clientId: _auth.clientId!);
+  }
+
+  // Push registration + notification-tap routing. Fire-and-forget: a failed
+  // registration never blocks the UI.
+  Future<void> _bootPush() async {
+    if (_pushBooted || _push == null) return;
+    _pushBooted = true;
+    _push!.onTap((sessionId) {
+      _navKey.currentState?.pushNamed('/session', arguments: sessionId);
+    });
+    try {
+      await _push!.bootstrap();
+    } catch (_) {
+      _pushBooted = false; // retry on next boot trigger
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navKey,
       title: 'ccferry',
-      routes: {'/login': (ctx) => _loginRoute(ctx), '/sessions': (ctx) => _sessionsRoute(ctx)},
+      routes: {'/sessions': (ctx) => _sessionsHome()},
       onGenerateRoute: (settings) {
         if (settings.name == '/session') {
           final sessionId = settings.arguments as String;
@@ -88,14 +111,10 @@ class _CcferryAppState extends State<CcferryApp> {
     );
   }
 
-  Widget _loginRoute(BuildContext ctx) =>
-      LoginPage(model: _auth, onDone: () => setState(_ensureModels));
-
-  Widget _sessionsRoute(BuildContext ctx) => _sessionsHome();
-
   Widget _sessionsHome() {
     _ensureModels();
     if (_sessions == null) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    unawaited(_bootPush());
     return MultiProvider(
       providers: [
         ChangeNotifierProvider<AuthModel>.value(value: _auth),
