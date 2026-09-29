@@ -9,17 +9,21 @@ import { LineDedupe } from '../lib/line-dedupe';
 import { renderMarkdown } from '../lib/markdown';
 import { followSse } from '../lib/sse-follow';
 import { useApprovalsStore } from '../stores/approvals';
-import { parsedLineToBubble } from '../lib/bubbles';
+import { extractToolResult, parsedLineToBubbles } from '../lib/bubbles';
 import { postEventError } from '../lib/post-events';
 import ApprovalCard from '../components/ApprovalCard.vue';
 
 const route = useRoute();
 const sessionId = route.params['id'] as string;
 const approvals = useApprovalsStore();
-const bubbles = ref<ReturnType<typeof parsedLineToBubble>[]>([]);
+const bubbles = ref<ReturnType<typeof parsedLineToBubbles>>([]);
 const errors = ref<string[]>([]);
 const input = ref('');
 const sending = ref(false);
+// Tool results arrive in later lines, paired by tool_use_id; the template
+// looks the output up from this map. A line with no result yet shows ⏳.
+const toolResults = ref<Record<string, { text: string; isError: boolean }>>({});
+const expandedTools = ref(new Set<string>());
 let stream: ReturnType<typeof followSse> | undefined;
 let approvalsStream: EventSource | undefined;
 const bottom = ref<HTMLElement | undefined>();
@@ -40,9 +44,18 @@ const dedupe = new LineDedupe();
 
 function pushBubble(line: ParsedLine): void {
   if (!dedupe.firstOf(line)) return;
-  const bubble = parsedLineToBubble(line);
-  if (bubble) bubbles.value.push(bubble);
+  const result = extractToolResult(line);
+  if (result) toolResults.value[result.id] = { text: result.text, isError: result.isError };
+  const newBubbles = parsedLineToBubbles(line);
+  if (newBubbles.length > 0) bubbles.value.push(...newBubbles);
   void nextTick(() => bottom.value?.scrollIntoView({ behavior: 'smooth' }));
+}
+
+function toggleTool(id: string): void {
+  const set = new Set(expandedTools.value);
+  if (set.has(id)) set.delete(id);
+  else set.add(id);
+  expandedTools.value = set;
 }
 
 function handleApprovalEvent(data: string): void {
@@ -134,7 +147,23 @@ onUnmounted(() => {
              never misparsed. -->
         <div v-if="bubble?.kind === 'text' && bubble.role === 'assistant'" class="md-body" v-html="renderMarkdown(bubble.text)"></div>
         <template v-else-if="bubble?.kind === 'text'">{{ bubble.text }}</template>
-        <template v-else-if="bubble?.kind === 'tool'">🔧 {{ bubble.name }}</template>
+        <template v-else-if="bubble?.kind === 'tool'">
+          <div class="tool-row" @click="bubble.toolUseId && toggleTool(bubble.toolUseId)">
+            <span class="tool-status">{{ !bubble.toolUseId || !(bubble.toolUseId in toolResults) ? '⏳' : toolResults[bubble.toolUseId]!.isError ? '✖' : '✔' }}</span>
+            <span class="tool-name">{{ bubble.name }}</span>
+            <span class="tool-summary">{{ bubble.summary }}</span>
+          </div>
+          <div v-if="bubble.toolUseId && expandedTools.has(bubble.toolUseId)" class="tool-detail">
+            <template v-if="bubble.toolUseId in toolResults">
+              <div class="tool-detail-label">结果 {{ toolResults[bubble.toolUseId]!.isError ? '（失败）' : '' }}</div>
+              <pre class="tool-out">{{ toolResults[bubble.toolUseId]!.text || '（无输出）' }}</pre>
+            </template>
+            <template v-else>
+              <div class="tool-detail-label">结果</div>
+              <pre class="tool-out">⏳ 执行中…</pre>
+            </template>
+          </div>
+        </template>
         <template v-else-if="bubble?.kind === 'raw'">{{ bubble.text }}</template>
       </div>
       <ApprovalCard
@@ -163,6 +192,14 @@ onUnmounted(() => {
 .bubble.tool { background: #fffbe8; font-size: 12px; }
 .bubble.raw { background: #f7f7f7; color: #969799; font-size: 12px; }
 .bubble-ts { float: right; margin-left: 8px; font-size: 11px; opacity: 0.55; }
+.bubble.tool { padding: 6px 10px; }
+.tool-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; cursor: pointer; }
+.tool-status { flex: none; }
+.tool-name { flex: none; font-weight: 600; }
+.tool-summary { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--cc-text-secondary, #969799); }
+.tool-detail { margin-top: 6px; border-top: 1px dashed var(--cc-border, #ebedf0); padding-top: 6px; }
+.tool-detail-label { font-size: 11px; color: var(--cc-text-secondary, #969799); margin-bottom: 2px; }
+.tool-out { margin: 0; max-height: 240px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; font-size: 11px; line-height: 1.5; color: var(--cc-text, #323233); }
 .error { color: var(--cc-danger); font-size: 12px; }
 .composer { display: flex; gap: 8px; padding: 8px; align-items: center; background: var(--cc-surface, #fff); }
 .composer :deep(.van-field) { flex: 1; }
