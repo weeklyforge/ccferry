@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 
 import 'package:ccferry_mobile/net/api_client.dart';
 import 'package:ccferry_mobile/pages/login_page.dart';
+import 'package:ccferry_mobile/pages/session_page.dart';
 import 'package:ccferry_mobile/pages/sessions_page.dart';
+import 'package:ccferry_mobile/session/stream_model.dart';
 import 'package:ccferry_mobile/state/approvals_model.dart';
 import 'package:ccferry_mobile/state/auth_model.dart';
 import 'package:ccferry_mobile/state/secure_store.dart';
@@ -58,9 +60,13 @@ class _CcferryAppState extends State<CcferryApp> {
       routes: {'/login': (ctx) => _loginRoute(ctx), '/sessions': (ctx) => _sessionsRoute(ctx)},
       onGenerateRoute: (settings) {
         if (settings.name == '/session') {
+          final sessionId = settings.arguments as String;
           return MaterialPageRoute<void>(
             settings: settings,
-            builder: (ctx) => const SizedBox(), // session page lands in Task 9
+            builder: (ctx) => ChangeNotifierProvider<SessionStreamModel>(
+              create: (_) => SessionStreamModel(connect: _client!.sseGet),
+              child: SessionPage(sessionId: sessionId),
+            ),
           );
         }
         return null;

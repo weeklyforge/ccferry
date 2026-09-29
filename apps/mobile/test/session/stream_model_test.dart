@@ -1,0 +1,103 @@
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:ccferry_mobile/session/stream_model.dart';
+
+// Fake SSE source: replays the same lines on every (re)connect.
+class FakeSource {
+  FakeSource(this.lines);
+
+  final List<String> lines;
+  final List<String> paths = <String>[];
+
+  Future<Stream<String>> connect(String path) async {
+    paths.add(path);
+    return Stream.fromIterable([
+      // Lines are already JSON strings — the frame wraps them verbatim.
+      for (final l in lines) 'data: $l\n\n',
+    ]);
+  }
+
+  /// Widget-test mode: emit the lines and stay open (like a live SSE), so the
+  /// follower never schedules a reconnect timer — fake_async flags pending
+  /// timers at test end.
+  Future<Stream<String>> connectOpen(String path) async {
+    paths.add(path);
+    final controller = StreamController<String>();
+    for (final l in lines) {
+      controller.add('data: $l\n\n');
+    }
+    // Never close — the test closes the model, which cancels the stream.
+    return controller.stream;
+  }
+
+  static String userLine(String uuid, String text) =>
+      jsonEncode({'uuid': uuid, 'type': 'user', 'message': {'content': text}});
+
+  static String resultLine(String toolUseId, String text) => jsonEncode({
+        'uuid': 'r-$toolUseId',
+        'type': 'user',
+        'message': {
+          'content': [
+            {'type': 'tool_result', 'tool_use_id': toolUseId, 'content': text},
+          ],
+        },
+      });
+}
+
+Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 300));
+
+void main() {
+  test('dedupe and pairing: one render per line', () async {
+    final source = FakeSource([
+      FakeSource.userLine('u1', 'hello'),
+      FakeSource.resultLine('t1', 'done'),
+    ]);
+    final model = SessionStreamModel(connect: source.connectOpen);
+    model.start(sessionId: 's1');
+    await settle();
+    model.close();
+
+    // user text line renders one TextBubble; the result-only line renders none
+    // (tool_result is not a bubble), but fills toolResults.
+    expect(model.bubbles.length, 1);
+    expect(model.toolResults['t1']!.text, 'done');
+    // Reconnect-following after a clean stream end is pinned by follow_test;
+    // not duplicated here (its 2s backoff does not fit a fast test window).
+  });
+
+  test('loadFullHistory reconnects without tail and keeps bubbles', () async {
+    final source = FakeSource([
+      FakeSource.userLine('u1', 'hello'),
+      FakeSource.resultLine('t1', 'done'),
+    ]);
+    final model = SessionStreamModel(connect: source.connectOpen);
+    model.start(sessionId: 's1');
+    await settle();
+    expect(model.bubbles.length, 1);
+
+    model.loadFullHistory();
+    await settle();
+    model.close();
+
+    expect(source.paths.last.contains('tailBytes'), isFalse);
+    expect(source.paths.first.contains('tailBytes=262144'), isTrue);
+    // NOT cleared: the replayed line is absorbed by dedupe, still one bubble.
+    expect(model.bubbles.length, 1);
+  });
+
+  test('toggle flips expanded state', () async {
+    final source = FakeSource([FakeSource.userLine('u1', 'hi')]);
+    final model = SessionStreamModel(connect: source.connectOpen);
+    model.start(sessionId: 's1');
+    await settle();
+    model.close();
+
+    expect(model.expanded.contains('t1'), isFalse);
+    model.toggle('t1');
+    expect(model.expanded.contains('t1'), isTrue);
+    model.toggle('t1');
+    expect(model.expanded.contains('t1'), isFalse);
+  });
+}
