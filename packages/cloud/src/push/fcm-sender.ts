@@ -8,6 +8,17 @@ export function isInvalidFcmToken(error: unknown): boolean {
 
 export type FcmSend = (sub: FcmSubscription, payload: string) => Promise<void>;
 
+// FCM `data` entries must ALL be strings (the API rejects booleans/numbers),
+// and undefined optionals must be dropped — String(undefined) would leak the
+// literal text "undefined" into the notification payload.
+export function toFcmData(payload: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (value !== undefined) out[key] = String(value);
+  }
+  return out;
+}
+
 // Real FCM sender built once at boot when FCM_SERVICE_ACCOUNT is set. The
 // dynamic imports keep firebase-admin out of the dependency path for
 // deployments that never enable native push.
@@ -19,7 +30,7 @@ export async function createFcmSender(serviceAccountPath: string): Promise<FcmSe
   }
   const messaging = messagingModule.getMessaging();
   return async (sub, payload) => {
-    const data = JSON.parse(payload) as Record<string, string>;
+    const data = toFcmData(JSON.parse(payload) as Record<string, unknown>);
     await messaging.send({
       token: sub.token,
       notification: { title: data['title'] ?? '', body: data['body'] ?? '' },
