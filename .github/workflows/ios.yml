@@ -1,0 +1,70 @@
+name: ios-testflight
+on:
+  workflow_dispatch: {} # manual release trigger only (spec R3: quota guard)
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable }
+      - run: flutter pub get
+        working-directory: apps/mobile
+      - name: Decode signing material
+        env:
+          P12_B64: ${{ secrets.IOS_DIST_P12_B64 }}
+          MOBILEPROVISION_B64: ${{ secrets.IOS_DIST_MOBILEPROVISION_B64 }}
+          ACS_KEY_JSON_B64: ${{ secrets.ACS_KEY_JSON_B64 }}
+        run: |
+          sec_dir="$RUNNER_TEMP/secrets"
+          mkdir -p "$sec_dir"
+          echo "$P12_B64" | base64 --decode > "$sec_dir/dist.p12"
+          echo "$MOBILEPROVISION_B64" | base64 --decode > "$sec_dir/dist.mobileprovision"
+          echo "$ACS_KEY_JSON_B64" | base64 --decode > "$sec_dir/acs.json"
+      - name: Import cert and profile
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+        run: |
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import "$RUNNER_TEMP/secrets/dist.p12" -k build.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$RUNNER_TEMP/secrets/dist.mobileprovision" ~/Library/MobileDevice/Provisioning\ Profiles/
+      - name: Place firebase plist
+        env:
+          GOOGLE_SERVICE_INFO_PLIST_B64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_B64 }}
+        run: |
+          mkdir -p apps/mobile/ios/Runner
+          echo "$GOOGLE_SERVICE_INFO_PLIST_B64" | base64 --decode > apps/mobile/ios/Runner/GoogleService-Info.plist
+      - name: Place App Store Connect API key
+        env:
+          ACS_KEY_JSON_B64: ${{ secrets.ACS_KEY_JSON_B64 }}
+          ACS_KEY_ID: ${{ secrets.ACS_KEY_ID }}
+        run: |
+          # altool looks up AuthKey_<KEY_ID>.p8 under ./private_auth_keys
+          mkdir -p apps/mobile/private_auth_keys
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          raw = base64.b64decode(os.environ['ACS_KEY_JSON_B64'])
+          key = json.loads(raw)
+          # The App Store Connect .p8 comes as its raw PEM or as JSON {key: ...}
+          pem = key.get('key', raw.decode()) if isinstance(key, dict) else raw.decode()
+          out = pathlib.Path('apps/mobile/private_auth_keys') / f"AuthKey_{os.environ['ACS_KEY_ID']}.p8"
+          out.write_text(pem)
+          PY
+      - run: flutter build ipa --release --export-options-plist=ios/ExportOptions.plist
+        working-directory: apps/mobile
+      - name: Upload to TestFlight
+        working-directory: apps/mobile
+        env:
+          ACS_KEY_ID: ${{ secrets.ACS_KEY_ID }}
+          ACS_ISSUER_ID: ${{ secrets.ACS_ISSUER_ID }}
+        run: |
+          ipa=$(ls build/ios/ipa/*.ipa | head -1)
+          xcrun altool --upload-app -f "$ipa" -t ios \
+            --apiKey "$ACS_KEY_ID" --apiIssuer "$ACS_ISSUER_ID"

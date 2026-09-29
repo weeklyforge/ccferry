@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>method</key>
+	<string>app-store</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<!-- OWNER: fill these two from the Apple Developer portal (identifiers,
+	     not secrets). The profile must contain the Push Notifications
+	     capability for com.fetaoily.ccferry. -->
+	<key>teamID</key>
+	<string>TEAM_ID_FROM_OWNER</string>
+	<key>signingCertificate</key>
+	<string>iPhone Distribution</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.fetaoily.ccferry</key>
+		<string>CCFERRY_PROFILE_NAME</string>
+	</dict>
+	<key>uploadSymbols</key>
+	<true/>
+</dict>
+</plist>

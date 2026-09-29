@@ -1,4 +1,4 @@
-package com.fetaoily.ccferry_mobile
+package com.fetaoily.ccferry
 
 import io.flutter.embedding.android.FlutterActivity
 
