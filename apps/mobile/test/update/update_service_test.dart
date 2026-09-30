@@ -83,6 +83,24 @@ void main() {
     expect(seen, isEmpty);
   });
 
+  test('a stalled body stream times out instead of hanging forever', () async {
+    final dir = await Directory.systemTemp.createTemp('update-svc-test');
+    addTearDown(() async => await dir.delete(recursive: true));
+    final controller = StreamController<List<int>>();
+    addTearDown(() async => await controller.close());
+    final service = UpdateService(
+      fetchMeta: () async => '',
+      cacheDirPath: () async => dir.path,
+      openApk: (_) async => (stream: controller.stream, contentLength: null),
+    );
+    final valid = UpdateRelease(
+        version: '1', versionCode: 2, sha256: 'a', apk: 'a', notes: '');
+    await expectLater(
+      service.downloadApk(valid, idleTimeout: const Duration(milliseconds: 80)),
+      throwsA(isA<TimeoutException>()),
+    );
+  });
+
   test('deletes the file and throws when the digest mismatches', () async {
     final dir = await Directory.systemTemp.createTemp('update-svc-test');
     addTearDown(() async => await dir.delete(recursive: true));

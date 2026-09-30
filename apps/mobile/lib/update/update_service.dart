@@ -79,9 +79,12 @@ class UpdateService {
   /// Downloads to `<cacheDir>/ccferry-update.apk`, hashing on the fly.
   /// Returns the file path after the digest matches [release.sha256];
   /// on mismatch the file is deleted and [UpdateVerifyException] thrown.
+  /// [idleTimeout] bounds the silence between body chunks — a stalled
+  /// connection fails into the retry path instead of hanging the caller.
   Future<String> downloadApk(
     UpdateRelease release, {
     void Function(double progress)? onProgress,
+    Duration idleTimeout = const Duration(seconds: 30),
   }) async {
     final dir = await cacheDirPath();
     final file = File('$dir/ccferry-update.apk');
@@ -94,7 +97,7 @@ class UpdateService {
     final sink = file.openWrite();
     try {
       var received = 0;
-      await for (final chunk in stream) {
+      await for (final chunk in stream.timeout(idleTimeout)) {
         hasher.add(chunk);
         sink.add(chunk);
         received += chunk.length;

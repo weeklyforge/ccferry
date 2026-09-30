@@ -117,7 +117,14 @@ class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver
             Text('${(update.progress * 100).toStringAsFixed(0)}%'),
           ],
         );
-        actions = const [];
+        // A slow download must not hold the app hostage; a stalled one fails
+        // into the retry path via the body idle timeout.
+        actions = [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('取消'),
+          ),
+        ];
       case UpdatePhase.ready:
         content = Text(_needPermission
             ? '需要"安装未知应用"权限才能安装更新，点击去授权后重试'

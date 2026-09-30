@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Publish a release: build the apk, hash it, and upload the apk plus update
-# metadata to GitHub Releases. Usage:
+# metadata to GitHub Releases. Requires: gh, flutter, sha256sum, curl, node.
+# Usage:
 #   scripts/release.sh "<release notes>"
 # The version comes from pubspec.yaml (X.Y.Z+N); N (versionCode) must be
 # strictly greater than the currently published metadata.

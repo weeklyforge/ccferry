@@ -294,6 +294,12 @@ void main() {
     await tester.pump();
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(find.text('以后再说'), findsNothing); // cannot back out mid-download
+    // A slow (not stalled) download must not hold the app hostage: the user
+    // can cancel out of the modal at any time.
+    expect(find.text('取消'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('发现新版本'), findsNothing);
   });
 
   testWidgets('the ready state auto-fires the installer exactly once', (tester) async {
