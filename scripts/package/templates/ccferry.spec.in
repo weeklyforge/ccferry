@@ -1,0 +1,16 @@
+Name: ccferry-__PRODUCT__
+Version: __VERSION__
+Release: 1%{?dist}
+Summary: ccferry __PRODUCT__ (single-package build)
+License: Proprietary
+BuildArch: __RPMARCH__
+Source0: staging.tar.gz
+%description
+Bun-compiled ccferry __PRODUCT__ binary (see docs/deploy-daemon.md).
+%prep
+%setup -q -T -c -n ccferry-__PRODUCT__
+%build
+%install
+tar -xzf %{SOURCE0} -C %{buildroot} --strip-components=1
+%files
+/*

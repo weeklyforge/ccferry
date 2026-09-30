@@ -1,0 +1,200 @@
+name: packages
+
+# Full-platform native packaging for ccferry client + cloud.
+# Manual dispatch builds everything and uploads workflow artifacts; a v* tag
+# additionally attaches the artifacts to the matching GitHub Release.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: '1.4.2' }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Build binaries + tarballs + debs
+        run: |
+          set -euxo pipefail
+          mkdir -p dist-packages build
+          build() { # <product> <platform> <debarch|''>
+            local product=$1 platform=$2 debarch=$3
+            (cd "packages/$product" && bun build --compile --target "bun-$platform" src/main.ts \
+               --outfile "../../dist-single/ccferry-$product-$platform")
+            local sidecar=""
+            if [ "$product" = client ]; then
+              sidecar="dist-single/claude-$platform"
+              node scripts/package/fetch-sidecar.js "$platform" "$sidecar"
+            fi
+            local root="build/ccferry-$product-$platform"
+            rm -rf "$root" && bash scripts/package/stage.sh "$product" "$platform" "$root" "$sidecar"
+            local ver; ver=$(node -p "require('./packages/$product/package.json').version")
+            tar --owner=0 --group=0 --numeric-owner -czf \
+              "dist-packages/ccferry-$product-${ver}-${platform}.tar.gz" -C "$root" .
+            if [ -n "$debarch" ]; then
+              mkdir -p "$root/DEBIAN"
+              node scripts/package/write-deb-control.js "$product" "$debarch" "$ver" "$root/DEBIAN"
+              if [ "$product" = cloud ]; then
+                echo "/etc/ccferry/cloud.env.template" > "$root/DEBIAN/conffiles"
+                printf '#!/bin/sh\nset -e\nif [ ! -f /etc/ccferry/cloud.env ] && [ -f /etc/ccferry/cloud.env.template ]; then\n  install -m 600 /etc/ccferry/cloud.env.template /etc/ccferry/cloud.env\n  echo "ccferry-cloud: created /etc/ccferry/cloud.env from the template - fill in tokens, then: systemctl restart ccferry-cloud"\nfi\nsystemctl daemon-reload\nsystemctl enable ccferry-cloud.service >/dev/null || true\nsystemctl try-restart ccferry-cloud.service || true\n' > "$root/DEBIAN/postinst"
+              else
+                printf '#!/bin/sh\nset -e\necho "ccferry-client: enable the per-user daemon with:"\necho "  mkdir -p ~/.config/systemd/user && cp /usr/share/ccferry/systemd/ccferry.service ~/.config/systemd/user/"\necho "  systemctl --user daemon-reload && systemctl --user enable --now ccferry"\n' > "$root/DEBIAN/postinst"
+              fi
+              chmod 755 "$root/DEBIAN/postinst"
+              dpkg-deb --root "$root" --build "dist-packages/ccferry-$product_${ver}_${debarch}.deb"
+            fi
+          }
+          build cloud  linux-x64      amd64
+          build cloud  linux-arm64     arm64
+          build cloud  linux-x64-musl  ''
+          build cloud  linux-arm64-musl ''
+          build client linux-x64       amd64
+          build client linux-arm64      arm64
+          build client linux-x64-musl  ''
+          build client linux-arm64-musl ''
+      - name: RPMs (fedora container)
+        run: |
+          set -euxo pipefail
+          for product in cloud client; do
+            ver=$(node -p "require('./packages/$product/package.json').version")
+            for pair in "x86_64 linux-x64" "aarch64 linux-arm64"; do
+              set -- $pair; rpmarch=$1; platform=$2
+              mkdir -p build/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+              tar -czf build/rpmbuild/SOURCES/staging.tar.gz -C "build/ccferry-$product-$platform" .
+              sed -e "s/__PRODUCT__/$product/" -e "s/__VERSION__/$ver/" \
+                  -e "s/__RPMARCH__/$rpmarch/" scripts/package/templates/ccferry.spec.in > build/rpmbuild/SPECS/ccferry.spec
+              docker run --rm -v "$PWD/build/rpmbuild:/rpmbuild" fedora:40 \
+                bash -c "rpmbuild -bb --define '_topdir /rpmbuild' --target $rpmarch /rpmbuild/SPECS/ccferry.spec"
+              mv build/rpmbuild/RPMS/$rpmarch/*.rpm "dist-packages/"
+            done
+          done
+      - name: Pacman (archlinux container, x86_64)
+        run: |
+          set -euxo pipefail
+          for product in cloud client; do
+            ver=$(node -p "require('./packages/$product/package.json').version")
+            mkdir -p build/pacman && rm -f build/pacman/*
+            tar -czf build/pacman/staging.tar.gz -C "build/ccferry-$product-linux-x64" .
+            sed -e "s/__PRODUCT__/$product/" -e "s/__VERSION__/$ver/" \
+                -e "s/__ARCH__/x86_64/" scripts/package/templates/PKGBUILD.in > build/pacman/PKGBUILD
+            docker run --rm -v "$PWD/build/pacman:/pkg" archlinux:base \
+              bash -c "useradd -m builder 2>/dev/null || true; chown -R builder /pkg; su builder -c 'cd /pkg && makepkg -f --skipinteg --noconfirm'"
+            mv build/pacman/*.pkg.tar.zst "dist-packages/"
+          done
+      - uses: actions/upload-artifact@v4
+        with: { name: linux, path: dist-packages/, if-no-files-found: error }
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: '1.4.2' }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Build + tarballs + client pkgs
+        run: |
+          set -euxo pipefail
+          mkdir -p dist-packages build
+          ver=$(node -p "require('./packages/client/package.json').version")
+          for platform in darwin-arm64 darwin-x64; do
+            (cd packages/client && bun build --compile --target "bun-$platform" src/main.ts \
+               --outfile "../../dist-single/ccferry-client-$platform")
+            sidecar="dist-single/claude-$platform"
+            node scripts/package/fetch-sidecar.js "$platform" "$sidecar"
+            root="build/ccferry-client-$platform-posix"
+            rm -rf "$root" && bash scripts/package/stage.sh client "$platform" "$root" "$sidecar"
+            tar --owner=0 --group=0 --numeric-owner -czf \
+              "dist-packages/ccferry-client-${ver}-${platform}.tar.gz" -C "$root" .
+            macroot="build/ccferry-client-$platform-mac"
+            rm -rf "$macroot" && bash scripts/package/stage.sh client "$platform" "$macroot" --mac "$sidecar"
+            pkgbuild --root "$macroot" --identifier com.ccferry.client \
+              --version "$ver" --install-location / \
+              "dist-packages/ccferry-client-${ver}-${platform}.pkg"
+          done
+          cver=$(node -p "require('./packages/cloud/package.json').version")
+          for platform in darwin-arm64 darwin-x64; do
+            (cd packages/cloud && bun build --compile --target "bun-$platform" src/main.ts \
+               --outfile "../../dist-single/ccferry-cloud-$platform")
+            root="build/ccferry-cloud-$platform"
+            rm -rf "$root" && bash scripts/package/stage.sh cloud "$platform" "$root"
+            tar --owner=0 --group=0 --numeric-owner -czf \
+              "dist-packages/ccferry-cloud-${cver}-${platform}.tar.gz" -C "$root" .
+          done
+      - uses: actions/upload-artifact@v4
+        with: { name: macos, path: dist-packages/, if-no-files-found: error }
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: '1.4.2' }
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Build + zips + setup exes
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p dist-packages build
+          choco install innosetup --no-progress -y >/dev/null
+          ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
+          ver=$(node -p "require('./packages/client/package.json').version")
+          for pair in "win32-x64 win64" "win32-arm64 winarm64"; do
+            set -- $pair; platform=$1; winarch=$2
+            (cd packages/client && bun build --compile --target "bun-$platform" src/main.ts \
+               --outfile "../../dist-single/ccferry-client-$platform")
+            sidecar="dist-single/claude-$platform"
+            node scripts/package/fetch-sidecar.js "$platform" "$sidecar"
+            root="build/ccferry-client-$platform"
+            rm -rf "$root" && bash scripts/package/stage.sh client "$platform" "$root" "$sidecar"
+            cp scripts/package/templates/win-start-daemon.cmd "$root/start-daemon.cmd"
+            cp scripts/package/templates/win-start-daemon-hidden.vbs "$root/start-daemon-hidden.vbs"
+            printf 'CCFERRY_TOKEN=\nCCFERRY_TUNNEL_URL=\nCCFERRY_TUNNEL_TOKEN=\n' > "$root/daemon.env"
+            7z a -tzip "dist-packages/ccferry-client-${ver}-${platform}.zip" ./"$root" >/dev/null
+            "$ISCC" /DCCFERRY_VERSION="$ver" /DWinArch="$winarch" \
+              /DOutDir="$(cygpath -w "$PWD/dist-packages")" \
+              /DStagingDir="$(cygpath -w "$PWD/$root")" \
+              scripts/package/templates/ccferry-client.iss.in | tail -n 3
+          done
+          cver=$(node -p "require('./packages/cloud/package.json').version")
+          for platform in win32-x64 win32-arm64; do
+            (cd packages/cloud && bun build --compile --target "bun-$platform" src/main.ts \
+               --outfile "../../dist-single/ccferry-cloud-$platform")
+            root="build/ccferry-cloud-$platform"
+            rm -rf "$root" && bash scripts/package/stage.sh cloud "$platform" "$root"
+            7z a -tzip "dist-packages/ccferry-cloud-${cver}-${platform}.zip" ./"$root" >/dev/null
+          done
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: dist-packages/, if-no-files-found: error }
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux, macos, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: dist-packages, merge-multiple: true }
+      - run: ls -la dist-packages/
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist-packages/**
+          fail_on_unmatched_files: true

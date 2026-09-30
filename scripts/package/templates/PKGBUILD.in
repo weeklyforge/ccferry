@@ -1,0 +1,11 @@
+pkgname=ccferry-__PRODUCT__
+pkgver=__VERSION__
+pkgrel=1
+pkgdesc="ccferry __PRODUCT__ (single-package build)"
+arch=('__ARCH__')
+license=('custom')
+source=("staging.tar.gz")
+sha256sums=('SKIP')
+package() {
+  tar -xzf staging.tar.gz -C "$pkgdir" --strip-components=1
+}

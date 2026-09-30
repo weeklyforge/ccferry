@@ -9,3 +9,6 @@ coverage/
 
 # superpowers worktrees
 .worktrees/
+dist-single/
+dist-packages/
+build/

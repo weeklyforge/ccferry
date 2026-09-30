@@ -1,0 +1,14 @@
+[Unit]
+Description=ccferry cloud server (tunnel + static PWA + push)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=-/etc/ccferry/cloud.env
+ExecStart=/usr/bin/ccferry-cloud
+Restart=always
+RestartSec=3
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

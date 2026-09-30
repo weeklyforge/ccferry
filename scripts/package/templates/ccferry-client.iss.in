@@ -1,0 +1,32 @@
+; Inno Setup script for the ccferry client (Windows). Built with:
+;   iscc /DCCFERRY_VERSION=<ver> /DWinArch=<win64|winarm64> /DOutDir=<abs-out> /DStagingDir=<abs-staging> ccferry-client.iss
+#define AppName "ccferry client"
+#define AppVer CCFERRY_VERSION
+
+[Setup]
+AppId={{F1A2B3C4-D5E6-4F70-8A9B-0C1D2E3F4A5B}
+AppName={#AppName}
+AppVersion={#AppVer}
+DefaultDirName={autopf}\ccferry
+OutputDir={#OutDir}
+OutputBaseName=ccferry-client-{#AppVer}-{#WinArch}-setup
+Compression=lzma2/max
+SolidCompression=yes
+ArchitecturesInstallIn64BitMode=x64compatible
+PrivilegesRequired=lowest
+
+[Files]
+Source: "{#StagingDir}\ccferry-client.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StagingDir}\claude.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StagingDir}\README.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StagingDir}\start-daemon.cmd"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#StagingDir}\start-daemon-hidden.vbs"; DestDir: "{app}"; Flags: ignoreversion
+; credential template goes to the user profile and is never overwritten
+Source: "{#StagingDir}\daemon.env"; DestDir: "{%USERPROFILE}\.ccferry"; DestName: "daemon.env"; Flags: onlyifdoesntexist skipifsourcedoesntexist
+
+[Tasks]
+Name: "autostart"; Description: "Register the logon autostart task (recommended)"; Flags: unchecked
+
+[Run]
+Filename: "schtasks"; Parameters: "/create /f /tn ccferry-daemon /tr ""wscript.exe """"{app}\start-daemon-hidden.vbs"""""" /sc onlogon"; Tasks: autostart; Flags: runhidden
+Filename: "{app}\README.txt"; Description: "Open the quick-start notes"; Flags: postskipifnotrun shellexec unchecked
