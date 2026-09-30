@@ -3,6 +3,7 @@ pkgver=__VERSION__
 pkgrel=1
 pkgdesc="ccferry __PRODUCT__ (single-package build)"
 arch=('__ARCH__')
+options=('!debug')
 license=('custom')
 source=("staging.tar.gz")
 sha256sums=('SKIP')

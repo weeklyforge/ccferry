@@ -101,7 +101,7 @@ jobs:
             sed -e "s/__PRODUCT__/$product/" -e "s/__VERSION__/$ver/" \
                 -e "s/__ARCH__/x86_64/" scripts/package/templates/PKGBUILD.in > build/pacman/PKGBUILD
             docker run --rm -v "$PWD/build/pacman:/pkg" archlinux:base \
-              bash -c "useradd -m builder 2>/dev/null || true; chown -R builder /pkg; su builder -c 'cd /pkg && makepkg -f --skipinteg --noconfirm'"
+              bash -c "pacman -Sy --noconfirm fakeroot >/dev/null 2>&1; useradd -m builder 2>/dev/null || true; chown -R builder /pkg; su builder -c 'cd /pkg && makepkg -f --skipinteg --noconfirm'"
             sudo mv build/pacman/*.pkg.tar.zst "dist-packages/"
           done
       - uses: actions/upload-artifact@v4
