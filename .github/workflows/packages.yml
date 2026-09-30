@@ -54,7 +54,7 @@ jobs:
                 printf '#!/bin/sh\nset -e\necho "ccferry-client: enable the per-user daemon with:"\necho "  mkdir -p ~/.config/systemd/user && cp /usr/share/ccferry/systemd/ccferry.service ~/.config/systemd/user/"\necho "  systemctl --user daemon-reload && systemctl --user enable --now ccferry"\n' > "$root/DEBIAN/postinst"
               fi
               chmod 755 "$root/DEBIAN/postinst"
-              dpkg-deb --root "$root" --build "dist-packages/ccferry-${product}_${ver}_${debarch}.deb"
+              dpkg-deb --build "$root" "dist-packages/ccferry-${product}_${ver}_${debarch}.deb"
             fi
           }
           build cloud  linux-x64      amd64
