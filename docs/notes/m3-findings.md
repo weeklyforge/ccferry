@@ -13,6 +13,21 @@ Evidence log for the M3 plan.
 - **Verdict: client cannot ship as a Bun single exe (D5' fallback engaged — node + tsx deploy path).**
   Nuance for Task 10: the failure is SDK-specific; the cloud package (fastify/websocket/static only, no SDK) may still be a viable single exe — verify when `packages/cloud` exists and prefer the exe for cloud, node+tsx for client.
 
+### Update 2026-09-30: client single package works with a sibling binary
+
+- SDK 0.3.283 ships the CLI as a native `claude.exe` in the platform
+  optional-dependency (`@anthropic-ai/claude-agent-sdk-win32-x64`, ~245MB); the
+  S2 failure was only that `bun --compile` cannot embed it.
+- `sdk-driver.ts` now resolves `claude(.exe)` **next to its own exe** and passes
+  it as `pathToClaudeCodeExecutable` (dev form unchanged — falls back to
+  module-tree resolution). `scripts/build-single.sh client` stages the binary
+  beside the exe: the deployable unit is the `dist-single/` folder.
+- Re-verified the S2 probe on the compiled exe (2026-09-30): `/api/projects`
+  200 with the real listing, and `POST /api/messages` `/compact` on a known
+  project returned `Not enough messages to compact.` — the SDK subprocess
+  spawns and streams through the exe. **The S2 client FAIL above is superseded
+  for the sidecar layout; single-FILE remains impossible.**
+
 ## Spike S1: nip.io + LE + ICP interception
 
 - DNS: `39.105.92.24.nip.io` resolves correctly via public resolvers (the dev PC's Clash fake-IP TUN hijacks it locally — all PC-side tests used `--resolve` direct-to-IP; phones unaffected).
