@@ -79,9 +79,13 @@ jobs:
               sed -e "s/__PRODUCT__/$product/" -e "s/__VERSION__/$ver/" \
                   -e "s/__RPMARCH__/$rpmarch/" scripts/package/templates/ccferry.spec.in > build/rpmbuild/SPECS/ccferry.spec
               # Cross-arch rpm: build natively under qemu emulation instead of
-              # fighting rpmbuild's host-arch compatibility table (GH ubuntu
-              # runners ship qemu binfmt for multi-arch containers).
-              dockerplat=""; [ "$rpmarch" = aarch64 ] && dockerplat="--platform linux/arm64"
+              # fighting rpmbuild's host-arch compatibility table. Both legs
+              # pin --platform explicitly: a cached arm64 image must never be
+              # reused for the x86_64 leg (and vice versa).
+              case "$rpmarch" in
+                aarch64) dockerplat="--platform linux/arm64" ;;
+                *) dockerplat="--platform linux/amd64" ;;
+              esac
               docker run --rm $dockerplat -v "$PWD/build/rpmbuild:/rpmbuild" fedora:40 \
                 bash -c "dnf -y install rpm-build >/dev/null 2>&1 && rpmbuild -bb --define '_topdir /rpmbuild' --target $rpmarch-linux /rpmbuild/SPECS/ccferry.spec"
               sudo mv build/rpmbuild/RPMS/$rpmarch/*.rpm "dist-packages/"
