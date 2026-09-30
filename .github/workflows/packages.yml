@@ -96,7 +96,7 @@ jobs:
           set -euxo pipefail
           for product in cloud client; do
             ver=$(node -p "require('./packages/$product/package.json').version")
-            mkdir -p build/pacman && rm -f build/pacman/*
+            sudo rm -rf build/pacman && mkdir -p build/pacman
             tar --exclude=DEBIAN -czf build/pacman/staging.tar.gz -C "build/ccferry-$product-linux-x64" .
             sed -e "s/__PRODUCT__/$product/" -e "s/__VERSION__/$ver/" \
                 -e "s/__ARCH__/x86_64/" scripts/package/templates/PKGBUILD.in > build/pacman/PKGBUILD
