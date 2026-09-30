@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exposes only the app cache dir so FileProvider can hand the downloaded
+     apk to the system installer. -->
+<paths>
+    <cache-path name="update" path="." />
+</paths>
