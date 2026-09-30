@@ -15,7 +15,7 @@ UpdateService serviceWith(UpdateRelease? meta) => UpdateService(
           ? ''
           : '{"version":"${meta.version}","versionCode":${meta.versionCode},'
               '"sha256":"${meta.sha256}","apk":"${meta.apk}","notes":"${meta.notes}"}',
-      openApk: () => throw UnimplementedError(),
+      openApk: (_) => throw UnimplementedError(),
       cacheDirPath: () => throw UnimplementedError(),
     );
 
@@ -60,11 +60,14 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('update-model-test');
     addTearDown(() async => await dir.delete(recursive: true));
     final body = List<int>.generate(2000, (i) => i % 256);
+    UpdateRelease? handed;
     final service = UpdateService(
       fetchMeta: () async => '',
       cacheDirPath: () async => dir.path,
-      openApk: () async =>
-          (stream: Stream.value(body), contentLength: body.length),
+      openApk: (r) async {
+        handed = r;
+        return (stream: Stream.value(body), contentLength: body.length);
+      },
     );
     final valid = UpdateRelease(
         version: '1.0.2',
@@ -80,6 +83,9 @@ void main() {
     expect(model.phase, UpdatePhase.ready);
     expect(model.downloadedApkPath, isNotNull);
     expect(progress.last, 1.0);
+    // The model must hand ITS release to the opener — the opener derives the
+    // download URL from it (tag-anchored apk field).
+    expect(handed!.versionCode, 2);
   });
 
   test('a download failure surfaces the error and a retry can succeed', () async {
@@ -88,7 +94,7 @@ void main() {
     final failing = UpdateService(
       fetchMeta: () async => '',
       cacheDirPath: () async => dir.path,
-      openApk: () => throw Exception('network gone'),
+      openApk: (_) => throw Exception('network gone'),
     );
     final model = UpdateModel(service: failing, localVersion: () async => (1, '1.0.0'));
     await model.check(); // -> failed
@@ -103,7 +109,7 @@ void main() {
     final retry = UpdateService(
       fetchMeta: () async => '',
       cacheDirPath: () async => dir.path,
-      openApk: () async {
+      openApk: (_) async {
         calls++;
         return (stream: Stream.value(body), contentLength: body.length);
       },

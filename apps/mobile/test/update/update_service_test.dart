@@ -17,7 +17,7 @@ Future<(String, List<int>)> download(
   final service = UpdateService(
     fetchMeta: () async => '',
     cacheDirPath: () async => dir.path,
-    openApk: () async => (
+    openApk: (_) async => (
       stream: Stream.value(body),
       contentLength: contentLength == -1 ? body.length : contentLength,
     ),
@@ -35,7 +35,7 @@ Future<(String, List<int>)> download(
 void main() {
   test('fetchLatest parses a good body', () async {
     final service = UpdateService(
-      openApk: () => throw UnimplementedError(),
+      openApk: (_) => throw UnimplementedError(),
       cacheDirPath: () => throw UnimplementedError(),
       fetchMeta: () async =>
           '{"version":"1.0.1","versionCode":2,"sha256":"a","apk":"ccferry.apk"}',
@@ -45,13 +45,13 @@ void main() {
 
   test('fetchLatest swallows garbage and transport errors to null', () async {
     final garbage = UpdateService(
-      openApk: () => throw UnimplementedError(),
+      openApk: (_) => throw UnimplementedError(),
       cacheDirPath: () => throw UnimplementedError(),
       fetchMeta: () async => '<html>502</html>',
     );
     expect(await garbage.fetchLatest(), isNull);
     final failing = UpdateService(
-      openApk: () => throw UnimplementedError(),
+      openApk: (_) => throw UnimplementedError(),
       cacheDirPath: () => throw UnimplementedError(),
       fetchMeta: () => throw Exception('offline'),
     );
@@ -90,7 +90,7 @@ void main() {
     final service = UpdateService(
       fetchMeta: () async => '',
       cacheDirPath: () async => dir.path,
-      openApk: () async => (
+      openApk: (_) async => (
         stream: Stream.value(body),
         contentLength: body.length,
       ),
@@ -113,7 +113,7 @@ void main() {
     final service = UpdateService(
       fetchMeta: () async => '',
       cacheDirPath: () async => dir.path,
-      openApk: () async => (
+      openApk: (_) async => (
         stream: Stream.value(body),
         contentLength: body.length,
       ),

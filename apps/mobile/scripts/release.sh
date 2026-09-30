@@ -42,6 +42,9 @@ flutter build apk --release
 sha=$(sha256sum "$APK" | cut -d' ' -f1)
 stage=$(mktemp -d)
 cp "$APK" "$stage/ccferry.apk"
+# The apk field is the immutable tag-anchored URL, not the latest alias —
+# alias redirects are cached and can skew against the metadata snapshot.
+apk_url="https://github.com/$REPO/releases/download/v$name/ccferry.apk"
 # JSON strings cannot hold raw newlines/backslashes; JSON.stringify escapes
 # the notes payload strictly (the quotes guard above stays as a first gate).
 notes_json=$(printf '%s' "$NOTES" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.stringify(s.trimEnd())))")
@@ -50,7 +53,7 @@ cat > "$stage/latest.json" <<EOF
   "version": "$name",
   "versionCode": $code,
   "sha256": "$sha",
-  "apk": "ccferry.apk",
+  "apk": "$apk_url",
   "notes": $notes_json
 }
 EOF

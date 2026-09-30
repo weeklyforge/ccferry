@@ -13,7 +13,11 @@ typedef MetaFetcher = Future<String> Function();
 /// A opened APK body plus the declared length (null when the server sent no
 /// usable content-length, e.g. chunked transfer).
 typedef ApkStream = ({Stream<List<int>> stream, int? contentLength});
-typedef ApkOpener = Future<ApkStream> Function();
+
+/// Opens the APK body for [release]. Implementations should download from
+/// the release-provided URL; the alias fallback keeps older metadata that
+/// only carries a filename working.
+typedef ApkOpener = Future<ApkStream> Function(UpdateRelease release);
 
 /// Thrown by [UpdateService.downloadApk] when the downloaded bytes do not
 /// match the published sha256. The partial file is deleted before this
@@ -37,7 +41,8 @@ class UpdateService {
     final inner = client ?? http.Client();
     Uri metaUrl() => Uri.parse(
         'https://github.com/weeklyforge/ccferry/releases/latest/download/latest.json');
-    Uri apkUrl() => Uri.parse(
+    // Fallback for metadata that carries a bare filename instead of a URL.
+    Uri aliasApkUrl() => Uri.parse(
         'https://github.com/weeklyforge/ccferry/releases/latest/download/ccferry.apk');
     return UpdateService(
       fetchMeta: () async {
@@ -45,9 +50,10 @@ class UpdateService {
         if (r.statusCode != 200) throw http.ClientException('status ${r.statusCode}');
         return r.body;
       },
-      openApk: () async {
-        final r =
-            await inner.send(http.Request('GET', apkUrl())).timeout(const Duration(minutes: 10));
+      openApk: (release) async {
+        final raw = release.apk;
+        final uri = raw.startsWith('http') ? Uri.parse(raw) : aliasApkUrl();
+        final r = await inner.send(http.Request('GET', uri)).timeout(const Duration(minutes: 10));
         if (r.statusCode != 200) throw http.ClientException('status ${r.statusCode}');
         final len = r.contentLength;
         return (stream: r.stream, contentLength: len != null && len > 0 ? len : null);
@@ -79,7 +85,7 @@ class UpdateService {
   }) async {
     final dir = await cacheDirPath();
     final file = File('$dir/ccferry-update.apk');
-    final (:stream, :contentLength) = await openApk();
+    final (:stream, :contentLength) = await openApk(release);
 
     late Digest digest;
     final hasher = sha256.startChunkedConversion(

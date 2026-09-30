@@ -73,7 +73,7 @@ UpdateModel updateWithMeta(UpdateRelease? meta) => UpdateModel(
             ? ''
             : '{"version":"${meta.version}","versionCode":${meta.versionCode},'
                 '"sha256":"${meta.sha256}","apk":"${meta.apk}","notes":"${meta.notes}"}',
-        openApk: () => throw UnimplementedError(),
+        openApk: (_) => throw UnimplementedError(),
         cacheDirPath: () => throw UnimplementedError(),
       ),
       localVersion: () async => (1, '1.0.0'),
@@ -282,7 +282,7 @@ void main() {
       fetchMeta: () async =>
           '{"version":"9.9.9","versionCode":99,"sha256":"a","apk":"ccferry.apk","notes":"n"}',
       cacheDirPath: () async => '/unused',
-      openApk: () => Completer<({Stream<List<int>> stream, int? contentLength})>().future,
+      openApk: (_) => Completer<({Stream<List<int>> stream, int? contentLength})>().future,
     );
     final update = UpdateModel(service: hanging, localVersion: () async => (1, '1.0.0'));
 
