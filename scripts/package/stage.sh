@@ -24,6 +24,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# Portable install helper: BSD install (macOS) lacks GNU install's -D.
+put() { # <src> <dst>
+  mkdir -p "$(dirname "$2")"
+  cp "$1" "$2"
+}
+
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 name="ccferry-$product"
 exe="$name"
@@ -39,37 +45,37 @@ built="$repo/dist-single/$name-$platform"
 if [ "$mac" = 1 ]; then
   # ---- darwin layout (pkgbuild --root / tar.gz) --------------------------
   [ "$product" = client ] || { echo "error: --mac layout is client-only (cloud ships as tgz)" >&2; exit 1; }
-  install -D "$built" "$root/usr/local/ccferry/$exe"
-  [ -n "$sidecar" ] && install -m 755 "$sidecar" "$root/usr/local/ccferry/$binname"
-  install -D "$repo/scripts/package/templates/com.ccferry.daemon.plist" \
+  put "$built" "$root/usr/local/ccferry/$exe"
+  [ -n "$sidecar" ] && put "$sidecar" "$root/usr/local/ccferry/$binname"
+  put "$repo/scripts/package/templates/com.ccferry.daemon.plist" \
     "$root/Library/LaunchAgents/com.ccferry.daemon.plist"
-  install -D "$repo/scripts/package/templates/README-client.txt" "$root/usr/local/ccferry/README.txt"
+  put "$repo/scripts/package/templates/README-client.txt" "$root/usr/local/ccferry/README.txt"
   exit 0
 fi
 
 if [ "$platform" = win32-x64 ] || [ "$platform" = win32-arm64 ]; then
   # ---- windows portable layout (zip / inno source dir) -------------------
-  install -D "$built" "$root/$exe"
-  [ -n "$sidecar" ] && install -m 755 "$sidecar" "$root/$binname"
-  install -D "$repo/scripts/package/templates/README-client.txt" "$root/README.txt"
+  put "$built" "$root/$exe"
+  [ -n "$sidecar" ] && put "$sidecar" "$root/$binname"
+  put "$repo/scripts/package/templates/README-client.txt" "$root/README.txt"
   exit 0
 fi
 
 # ---- POSIX layout (tar.gz / deb data / rpm / pacman) ----------------------
 if [ "$product" = cloud ]; then
-  install -D "$built" "$root/usr/bin/$name"
-  install -D "$repo/scripts/package/templates/ccferry-cloud.service" \
+  put "$built" "$root/usr/bin/$name"
+  put "$repo/scripts/package/templates/ccferry-cloud.service" \
     "$root/lib/systemd/system/ccferry-cloud.service"
-  install -D "$repo/scripts/package/templates/cloud.env.template" \
+  put "$repo/scripts/package/templates/cloud.env.template" \
     "$root/etc/ccferry/cloud.env.template"
 else
-  install -D "$built" "$root/usr/lib/ccferry/$name"
-  [ -n "$sidecar" ] && install -m 755 "$sidecar" "$root/usr/lib/ccferry/$binname"
+  put "$built" "$root/usr/lib/ccferry/$name"
+  [ -n "$sidecar" ] && put "$sidecar" "$root/usr/lib/ccferry/$binname"
   mkdir -p "$root/usr/bin"
   printf '#!/bin/sh\nexec /usr/lib/ccferry/%s "$@"\n' "$name" > "$root/usr/bin/$name"
   chmod 755 "$root/usr/bin/$name"
-  install -D "$repo/scripts/package/templates/ccferry-client-user.service" \
+  put "$repo/scripts/package/templates/ccferry-client-user.service" \
     "$root/usr/share/ccferry/systemd/ccferry.service"
 fi
-install -D "$repo/scripts/package/templates/README-$product.txt" \
+put "$repo/scripts/package/templates/README-$product.txt" \
   "$root/usr/share/doc/$name/README.txt"

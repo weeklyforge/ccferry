@@ -42,7 +42,7 @@ jobs:
             local root="build/ccferry-$product-$platform"
             rm -rf "$root" && bash scripts/package/stage.sh "$product" "$platform" "$root" "$sidecar"
             local ver; ver=$(node -p "require('./packages/$product/package.json').version")
-            tar --uid 0 --gid 0 -czf \
+            tar -czf \
               "dist-packages/ccferry-$product-${ver}-${platform}.tar.gz" -C "$root" .
             if [ -n "$debarch" ]; then
               mkdir -p "$root/DEBIAN"
@@ -119,7 +119,7 @@ jobs:
             node scripts/package/fetch-sidecar.js "$platform" "$sidecar"
             root="build/ccferry-client-$platform-posix"
             rm -rf "$root" && bash scripts/package/stage.sh client "$platform" "$root" "$sidecar"
-            tar --uid 0 --gid 0 -czf \
+            tar -czf \
               "dist-packages/ccferry-client-${ver}-${platform}.tar.gz" -C "$root" .
             macroot="build/ccferry-client-$platform-mac"
             rm -rf "$macroot" && bash scripts/package/stage.sh client "$platform" "$macroot" --mac "$sidecar"
@@ -133,7 +133,7 @@ jobs:
                --outfile "../../dist-single/ccferry-cloud-$platform")
             root="build/ccferry-cloud-$platform"
             rm -rf "$root" && bash scripts/package/stage.sh cloud "$platform" "$root"
-            tar --uid 0 --gid 0 -czf \
+            tar -czf \
               "dist-packages/ccferry-cloud-${cver}-${platform}.tar.gz" -C "$root" .
           done
       - uses: actions/upload-artifact@v4
@@ -169,7 +169,7 @@ jobs:
             cp scripts/package/templates/win-start-daemon-hidden.vbs "$root/start-daemon-hidden.vbs"
             printf 'CCFERRY_TOKEN=\nCCFERRY_TUNNEL_URL=\nCCFERRY_TUNNEL_TOKEN=\n' > "$root/daemon.env"
             7z a -tzip "dist-packages/ccferry-client-${ver}-${platform}.zip" ./"$root" >/dev/null
-            "$ISCC" /DCCFERRY_VERSION="$ver" /DWinArch="$winarch" \
+            MSYS2_ARG_CONV_EXCL="*" "$ISCC" /DCCFERRY_VERSION="$ver" /DWinArch="$winarch" \
               /DOutDir="$(cygpath -w "$PWD/dist-packages")" \
               /DStagingDir="$(cygpath -w "$PWD/$root")" \
               scripts/package/templates/ccferry-client.iss.in | tail -n 3
