@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -15,6 +16,9 @@ import 'package:ccferry_mobile/state/auth_model.dart';
 import 'package:ccferry_mobile/state/connection_model.dart';
 import 'package:ccferry_mobile/state/secure_store.dart';
 import 'package:ccferry_mobile/state/sessions_model.dart';
+import 'package:ccferry_mobile/update/update_model.dart';
+import 'package:ccferry_mobile/update/update_release.dart';
+import 'package:ccferry_mobile/update/update_service.dart';
 
 class MemoryStore implements SecureStore {
   final values = <String, String>{};
@@ -61,7 +65,24 @@ ApiClient routedClient({required void Function(int) onLoad, String events = 'ope
       token: () => 't',
     );
 
-Widget harness({required ApprovalsModel approvals, required SessionsModel model, ApiClient? client}) =>
+// A model that reaches `available` through the real check() path (SessionsPage's
+// initState drives it): fetchMeta serves the given release, or '' -> null.
+UpdateModel updateWithMeta(UpdateRelease? meta) => UpdateModel(
+      service: UpdateService(
+        fetchMeta: () async => meta == null
+            ? ''
+            : '{"version":"${meta.version}","versionCode":${meta.versionCode},'
+                '"sha256":"${meta.sha256}","apk":"${meta.apk}","notes":"${meta.notes}"}',
+        openApk: () => throw UnimplementedError(),
+        cacheDirPath: () => throw UnimplementedError(),
+      ),
+      localVersion: () async => (1, '1.0.0'),
+    );
+
+const newerRelease = UpdateRelease(
+    version: '9.9.9', versionCode: 99, sha256: 'a', apk: 'ccferry.apk', notes: '- 修复大问题');
+
+Widget harness({required ApprovalsModel approvals, required SessionsModel model, ApiClient? client, UpdateModel? update}) =>
     MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: client!),
@@ -69,6 +90,7 @@ Widget harness({required ApprovalsModel approvals, required SessionsModel model,
         ChangeNotifierProvider<ApprovalsModel>.value(value: approvals),
         ChangeNotifierProvider<SessionsModel>.value(value: model),
         ChangeNotifierProvider<ConnectionModel>.value(value: ConnectionModel()),
+        ChangeNotifierProvider<UpdateModel>.value(value: update ?? updateWithMeta(null)),
       ],
       child: const MaterialApp(home: SessionsPage()),
     );
@@ -149,6 +171,7 @@ void main() {
           ChangeNotifierProvider<ApprovalsModel>.value(value: approvals),
           ChangeNotifierProvider<SessionsModel>.value(value: model),
           ChangeNotifierProvider<ConnectionModel>.value(value: ConnectionModel()),
+          ChangeNotifierProvider<UpdateModel>.value(value: updateWithMeta(null)),
         ],
         child: MaterialApp(
           home: const SessionsPage(),
@@ -178,6 +201,97 @@ void main() {
     expect(auth.base, 'https://new.example');
     expect(auth.token, 'new-token');
     expect(await store.read('daemonBase'), 'https://new.example');
+  });
+
+  testWidgets('prompts with release notes when a newer version exists', (tester) async {
+    final client = routedClient(onLoad: (_) {});
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+    final update = updateWithMeta(newerRelease);
+
+    await tester.pumpWidget(harness(approvals: approvals, model: model, client: client, update: update));
+    await tester.pumpAndSettle(); // the page auto-check resolves -> available -> dialog
+
+    expect(find.textContaining('发现新版本 9.9.9'), findsOneWidget);
+    expect(find.textContaining('- 修复大问题'), findsOneWidget);
+  });
+
+  testWidgets('no dialog when the check fails silently', (tester) async {
+    final client = routedClient(onLoad: (_) {});
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+    final update = updateWithMeta(null); // fetchMeta returns '' -> failed (silent)
+
+    await tester.pumpWidget(harness(approvals: approvals, model: model, client: client, update: update));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('发现新版本'), findsNothing);
+  });
+
+  testWidgets('later button dismisses for this boot', (tester) async {
+    final client = routedClient(onLoad: (_) {});
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+    final update = updateWithMeta(newerRelease);
+
+    await tester.pumpWidget(harness(approvals: approvals, model: model, client: client, update: update));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('以后再说'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('发现新版本'), findsNothing);
+    expect(update.dismissed, isTrue);
+  });
+
+  testWidgets('download button starts the download and shows progress', (tester) async {
+    final client = routedClient(onLoad: (_) {});
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+    // A real check to available, then a download that never completes: the
+    // dialog must sit in the progress state.
+    final hanging = UpdateService(
+      fetchMeta: () async =>
+          '{"version":"9.9.9","versionCode":99,"sha256":"a","apk":"ccferry.apk","notes":"n"}',
+      cacheDirPath: () async => '/unused',
+      openApk: () => Completer<({Stream<List<int>> stream, int? contentLength})>().future,
+    );
+    final update = UpdateModel(service: hanging, localVersion: () async => (1, '1.0.0'));
+
+    await tester.pumpWidget(harness(approvals: approvals, model: model, client: client, update: update));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('下载更新'));
+    await tester.pump();
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
+    expect(find.text('以后再说'), findsNothing); // cannot back out mid-download
+  });
+
+  testWidgets('the ready state auto-fires the installer exactly once', (tester) async {
+    final client = routedClient(onLoad: (_) {});
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+    final update = updateWithMeta(newerRelease);
+    var installCalls = 0;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('ccferry/install'), (call) async {
+      installCalls++;
+      return 'started';
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('ccferry/install'), null));
+
+    await tester.pumpWidget(harness(approvals: approvals, model: model, client: client, update: update));
+    await tester.pumpAndSettle(); // dialog is open on available
+
+    // Jump straight to ready via the Task 3 test seam: the dialog auto-fires
+    // the installer once and stays open on the installing affordance (the
+    // system installer takes over on device).
+    update.debugCompleteDownload('/cache/ccferry-update.apk');
+    await tester.pumpAndSettle();
+
+    expect(installCalls, 1);
+    expect(find.text('立即安装'), findsOneWidget);
   });
 }
 

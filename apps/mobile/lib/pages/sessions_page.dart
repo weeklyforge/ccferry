@@ -10,6 +10,8 @@ import 'package:ccferry_mobile/state/approvals_model.dart';
 import 'package:ccferry_mobile/state/auth_model.dart';
 import 'package:ccferry_mobile/state/connection_model.dart';
 import 'package:ccferry_mobile/state/sessions_model.dart';
+import 'package:ccferry_mobile/update/update_dialog.dart';
+import 'package:ccferry_mobile/update/update_model.dart';
 
 String _relative(int ms, DateTime now) {
   final minutes = ((now.millisecondsSinceEpoch - ms) / 60000).round();
@@ -43,7 +45,16 @@ class _SessionsPageState extends State<SessionsPage> {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _listenEvents();
+      if (mounted) _checkUpdates();
     });
+  }
+
+  // One silent update check per boot (spec section 5): fetch metadata, and
+  // only surface anything when a strictly newer versionCode exists.
+  Future<void> _checkUpdates() async {
+    final update = context.read<UpdateModel>();
+    await update.check();
+    if (mounted) await UpdateDialog.showIfAvailable(context);
   }
 
   // The events stream does three jobs: instant list refresh on session events,
