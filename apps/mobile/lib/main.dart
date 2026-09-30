@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:http/io_client.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import 'package:ccferry_mobile/net/api_client.dart';
@@ -16,6 +17,8 @@ import 'package:ccferry_mobile/state/auth_model.dart';
 import 'package:ccferry_mobile/state/connection_model.dart';
 import 'package:ccferry_mobile/state/secure_store.dart';
 import 'package:ccferry_mobile/state/sessions_model.dart';
+import 'package:ccferry_mobile/update/update_model.dart';
+import 'package:ccferry_mobile/update/update_service.dart';
 
 void main() {
   runApp(const CcferryApp());
@@ -41,6 +44,14 @@ class _CcferryAppState extends State<CcferryApp> {
   PushService? _push;
   // App-lifetime: the badge state must survive page rebuilds.
   final ConnectionModel _connection = ConnectionModel();
+  // App-lifetime: one update check per boot, survives page rebuilds.
+  late final UpdateModel _update = UpdateModel(
+    service: UpdateService.github(),
+    localVersion: () async {
+      final info = await PackageInfo.fromPlatform();
+      return (int.parse(info.buildNumber), info.version);
+    },
+  );
   bool _booted = false;
   bool _pushBooted = false;
 
@@ -136,6 +147,7 @@ class _CcferryAppState extends State<CcferryApp> {
         ChangeNotifierProvider<ApprovalsModel>.value(value: _approvals!),
         ChangeNotifierProvider<SessionsModel>.value(value: _sessions!),
         ChangeNotifierProvider<ConnectionModel>.value(value: _connection),
+        ChangeNotifierProvider<UpdateModel>.value(value: _update),
       ],
       child: const SessionsPage(),
     );
