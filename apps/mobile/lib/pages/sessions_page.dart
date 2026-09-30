@@ -8,6 +8,7 @@ import 'package:ccferry_mobile/net/follow.dart';
 import 'package:ccferry_mobile/session/session_status.dart';
 import 'package:ccferry_mobile/state/approvals_model.dart';
 import 'package:ccferry_mobile/state/auth_model.dart';
+import 'package:ccferry_mobile/state/connection_model.dart';
 import 'package:ccferry_mobile/state/sessions_model.dart';
 
 String _relative(int ms, DateTime now) {
@@ -45,17 +46,19 @@ class _SessionsPageState extends State<SessionsPage> {
     });
   }
 
-  // The events stream does two jobs: instant list refresh on session events,
-  // and — just by being open — it marks this clientId foreground on the
-  // cloud, which is what suppresses duplicate native pushes.
+  // The events stream does three jobs: instant list refresh on session events,
+  // marking this clientId foreground on the cloud (suppresses duplicate native
+  // pushes), and — through the connection model — the connectivity badge.
   void _listenEvents() {
     final client = context.read<ApiClient>();
     final clientId = context.read<AuthModel>().clientId;
     final model = context.read<SessionsModel>();
+    final conn = context.read<ConnectionModel>();
     _eventsHandle = followSse(
       connect: () => client.sseGet('/api/events/stream?clientId=${Uri.encodeQueryComponent(clientId ?? '')}'),
       onLine: (_) => model.refresh(),
-      onReset: () {},
+      onReset: conn.dropped,
+      onOpen: conn.opened,
       delay: (d) => Future<void>.delayed(d),
     );
   }
@@ -71,6 +74,7 @@ class _SessionsPageState extends State<SessionsPage> {
   Widget build(BuildContext context) {
     final sessions = context.watch<SessionsModel>();
     final approvals = context.watch<ApprovalsModel>();
+    final conn = context.watch<ConnectionModel>();
     final now = DateTime.now();
 
     Widget body;
@@ -139,8 +143,48 @@ class _SessionsPageState extends State<SessionsPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('会话总览')),
+      appBar: AppBar(
+        title: const Text('会话总览'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Center(child: _connectionBadge(conn.state)),
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: '设置',
+            onPressed: () => Navigator.of(context).pushNamed('/settings'),
+          ),
+        ],
+      ),
       body: body,
+    );
+  }
+
+  Widget _connectionBadge(String state) {
+    final (label, color) = switch (state) {
+      'online' => ('已连接', const Color(0xFF07C160)),
+      'reconnecting' => ('重连中', Colors.red),
+      _ => ('连接中', Colors.orange),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(fontSize: 11, color: color)),
+        ],
+      ),
     );
   }
 

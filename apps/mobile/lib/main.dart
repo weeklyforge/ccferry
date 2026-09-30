@@ -8,10 +8,12 @@ import 'package:ccferry_mobile/net/api_client.dart';
 import 'package:ccferry_mobile/pages/login_page.dart';
 import 'package:ccferry_mobile/pages/session_page.dart';
 import 'package:ccferry_mobile/pages/sessions_page.dart';
+import 'package:ccferry_mobile/pages/settings_page.dart';
 import 'package:ccferry_mobile/push/push_service.dart';
 import 'package:ccferry_mobile/session/stream_model.dart';
 import 'package:ccferry_mobile/state/approvals_model.dart';
 import 'package:ccferry_mobile/state/auth_model.dart';
+import 'package:ccferry_mobile/state/connection_model.dart';
 import 'package:ccferry_mobile/state/secure_store.dart';
 import 'package:ccferry_mobile/state/sessions_model.dart';
 
@@ -37,6 +39,8 @@ class _CcferryAppState extends State<CcferryApp> {
   ApprovalsModel? _approvals;
   SessionsModel? _sessions;
   PushService? _push;
+  // App-lifetime: the badge state must survive page rebuilds.
+  final ConnectionModel _connection = ConnectionModel();
   bool _booted = false;
   bool _pushBooted = false;
 
@@ -82,8 +86,7 @@ class _CcferryAppState extends State<CcferryApp> {
       title: 'ccferry',
       routes: {'/sessions': (ctx) => _sessionsHome()},
       onGenerateRoute: (settings) {
-        if (settings.name == '/session') {
-          final sessionId = settings.arguments as String;
+        if (settings.name == '/session') {          final sessionId = settings.arguments as String;
           return MaterialPageRoute<void>(
             settings: settings,
             builder: (ctx) => MultiProvider(
@@ -95,6 +98,17 @@ class _CcferryAppState extends State<CcferryApp> {
                 ),
               ],
               child: SessionPage(sessionId: sessionId),
+            ),
+          );
+        }
+        if (settings.name == '/settings') {
+          // Pushed on the root navigator, outside the home provider scope —
+          // provide AuthModel directly.
+          return MaterialPageRoute<void>(
+            settings: settings,
+            builder: (ctx) => ChangeNotifierProvider<AuthModel>.value(
+              value: _auth,
+              child: const SettingsPage(),
             ),
           );
         }
@@ -121,6 +135,7 @@ class _CcferryAppState extends State<CcferryApp> {
         Provider<ApiClient>.value(value: _client!),
         ChangeNotifierProvider<ApprovalsModel>.value(value: _approvals!),
         ChangeNotifierProvider<SessionsModel>.value(value: _sessions!),
+        ChangeNotifierProvider<ConnectionModel>.value(value: _connection),
       ],
       child: const SessionsPage(),
     );
