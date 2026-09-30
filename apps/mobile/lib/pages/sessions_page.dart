@@ -27,6 +27,9 @@ class SessionsPage extends StatefulWidget {
 class _SessionsPageState extends State<SessionsPage> {
   Timer? _poll;
   FollowHandle? _eventsHandle;
+  // PWA Collapse semantics: every project group starts collapsed; tapping a
+  // header toggles it (openGroups in the pwa starts empty).
+  final Set<String> _openGroups = {};
 
   @override
   void initState() {
@@ -87,25 +90,48 @@ class _SessionsPageState extends State<SessionsPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
             for (final group in sessions.groups) ...[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(group.shortName,
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                    Text(group.projectPath,
-                        style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                  ],
+              InkWell(
+                onTap: () => setState(() {
+                  if (!_openGroups.remove(group.projectPath)) {
+                    _openGroups.add(group.projectPath);
+                  }
+                }),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(group.shortName,
+                                style: const TextStyle(
+                                    fontSize: 14, fontWeight: FontWeight.w600)),
+                            Text(group.projectPath,
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.grey[600])),
+                          ],
+                        ),
+                      ),
+                      Text('${group.list.length}',
+                          style:
+                              TextStyle(fontSize: 12, color: Colors.grey[600])),
+                      Icon(_openGroups.contains(group.projectPath)
+                          ? Icons.expand_less
+                          : Icons.expand_more),
+                    ],
+                  ),
                 ),
               ),
-              for (final s in group.list)
-                ListTile(
-                  title: Text(s.firstUserText.isEmpty ? '(无摘要)' : s.firstUserText),
-                  subtitle: Text(_relative(s.lastModifiedMs, now)),
-                  trailing: _statusChip(sessionStatus(s, now, approvals.pending)),
-                  onTap: () => Navigator.of(context).pushNamed('/session', arguments: s.sessionId),
-                ),
+              if (_openGroups.contains(group.projectPath))
+                for (final s in group.list)
+                  ListTile(
+                    title: Text(s.firstUserText.isEmpty ? '(无摘要)' : s.firstUserText),
+                    subtitle: Text(_relative(s.lastModifiedMs, now)),
+                    trailing: _statusChip(sessionStatus(s, now, approvals.pending)),
+                    onTap: () => Navigator.of(context)
+                        .pushNamed('/session', arguments: s.sessionId),
+                  ),
             ],
           ],
         ),

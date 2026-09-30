@@ -77,7 +77,12 @@ void main() {
     await tester.pumpWidget(harness(approvals: approvals, model: model, client: client));
     await tester.pumpAndSettle();
 
+    // PWA Collapse semantics: every project group starts collapsed — the
+    // header row shows, the sessions stay hidden until the header is tapped.
     expect(find.text('pkg'), findsOneWidget);
+    expect(find.text('fix login'), findsNothing);
+    await tester.tap(find.text('pkg'));
+    await tester.pumpAndSettle();
     expect(find.text('fix login'), findsOneWidget);
     expect(find.text('等你批准'), findsOneWidget);
     expect(find.text('刚刚'), findsOneWidget);
