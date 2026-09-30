@@ -16,7 +16,13 @@ class UpdateDialog extends StatefulWidget {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const UpdateDialog(),
+      // The dialog builds on the root navigator, ABOVE the page's provider
+      // scope (same shape as the /settings route) — provide the model
+      // directly or every watch/read inside throws in release builds.
+      builder: (_) => ChangeNotifierProvider<UpdateModel>.value(
+        value: update,
+        child: const UpdateDialog(),
+      ),
     );
   }
 

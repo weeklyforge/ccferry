@@ -216,6 +216,34 @@ void main() {
     expect(find.textContaining('- 修复大问题'), findsOneWidget);
   });
 
+  testWidgets('prompts even when providers sit below the navigator (production shape)', (tester) async {
+    final client = routedClient(onLoad: (_) {});
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+    final update = updateWithMeta(newerRelease);
+
+    // Production main.dart provides the models inside `home:`, below the root
+    // navigator that showDialog builds on. The dialog must still find them.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MultiProvider(
+          providers: [
+            Provider<ApiClient>.value(value: client),
+            ChangeNotifierProvider<AuthModel>.value(value: AuthModel(store: MemoryStore())),
+            ChangeNotifierProvider<ApprovalsModel>.value(value: approvals),
+            ChangeNotifierProvider<SessionsModel>.value(value: model),
+            ChangeNotifierProvider<ConnectionModel>.value(value: ConnectionModel()),
+            ChangeNotifierProvider<UpdateModel>.value(value: update),
+          ],
+          child: const SessionsPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('发现新版本 9.9.9'), findsOneWidget);
+  });
+
   testWidgets('no dialog when the check fails silently', (tester) async {
     final client = routedClient(onLoad: (_) {});
     final approvals = ApprovalsModel(client: client);
