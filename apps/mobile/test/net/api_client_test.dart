@@ -81,6 +81,35 @@ void main() {
     );
   });
 
+  test('getJsonQuery encodes chinese and space query values', () async {
+    http.BaseRequest? seen;
+    final client = ApiClient(
+      client: MockClient((req) async {
+        seen = req;
+        return http.Response(jsonEncode({'path': 'a', 'content': 'x'}), 200);
+      }),
+      base: () => Uri.parse('https://x.example'),
+      token: () => 'tok',
+    );
+    await client.getJsonQuery('/api/vault/file', {'path': '项目管理/热力 索引.md'});
+    expect(seen!.url.path, '/api/vault/file');
+    expect(seen!.url.queryParameters['path'], '项目管理/热力 索引.md');
+    expect(seen!.url.toString(), isNot(contains(' '))); // raw value never leaks unencoded
+    expect(seen!.headers['Authorization'], 'Bearer tok');
+  });
+
+  test('getJsonQuery throws ApiError on 503', () async {
+    final client = ApiClient(
+      client: MockClient((req) async => http.Response(jsonEncode({'error': 'vault_not_configured'}), 503)),
+      base: () => Uri.parse('https://x.example'),
+      token: () => 'tok',
+    );
+    await expectLater(
+      client.getJsonQuery('/api/vault/tree', {}),
+      throwsA(isA<ApiError>().having((e) => e.status, 'status', 503)),
+    );
+  });
+
   test('sseGetUrl omits token when unauthenticated', () {
     final client = ApiClient(
       client: MockClient((req) async => http.Response('', 200)),

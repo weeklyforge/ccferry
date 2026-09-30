@@ -45,6 +45,15 @@ class ApiClient {
     return _decodeOrThrow(res);
   }
 
+  /// GETs with encoded query params. Vault paths and search terms carry
+  /// Chinese and spaces — never hand-concatenate them into the path string.
+  Future<dynamic> getJsonQuery(String path, Map<String, String> query) async {
+    final req = http.Request('GET', _uri(path).replace(queryParameters: query))
+      ..headers.addAll(_authHeaders());
+    final res = await http.Response.fromStream(await client.send(req));
+    return _decodeOrThrow(res);
+  }
+
   /// GETs without parsing — callers that only need the status use this.
   Future<int> getStatus(String path) async => (await _get(path)).statusCode;
 
