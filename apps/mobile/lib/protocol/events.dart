@@ -13,12 +13,27 @@ class ParsedLine {
   final String? raw;
 }
 
-// Mirrors packages/protocol ParsedLine semantics: a line is either a decoded
-// JSON object or the raw text passthrough — a malformed line must never throw.
+// Mirrors packages/protocol ParsedLine semantics: the wire payload is the
+// daemon's ParsedLine envelope — {"ok":true,"line":N,"json":{...}} or
+// {"ok":false,"line":N,"raw":"..."} — and this unwraps it to the local
+// ParsedLine. A malformed payload must never throw (spec R4); a bare JSON
+// object without the envelope marker falls back to a bare session line.
 ParsedLine parseSessionLine(String raw, int line) {
   try {
     final value = jsonDecode(raw);
-    if (value is Map<String, dynamic>) return ParsedLine.ok(line, value);
+    if (value is Map<String, dynamic>) {
+      final ok = value['ok'];
+      if (ok is bool) {
+        final n = (value['line'] as num?)?.toInt() ?? line;
+        if (ok) {
+          final inner = value['json'];
+          if (inner is Map<String, dynamic>) return ParsedLine.ok(n, inner);
+          return ParsedLine.bad(n, raw); // envelope without a json object
+        }
+        return ParsedLine.bad(n, (value['raw'] as String?) ?? raw);
+      }
+      return ParsedLine.ok(line, value);
+    }
   } catch (_) {
     // fall through to raw passthrough (spec R4)
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ccferry_mobile/session/bubbles.dart';
 import 'package:ccferry_mobile/session/stream_model.dart';
 
 // Fake SSE source: replays the same lines on every (re)connect.
@@ -35,6 +36,11 @@ class FakeSource {
   static String userLine(String uuid, String text) =>
       jsonEncode({'uuid': uuid, 'type': 'user', 'message': {'content': text}});
 
+  /// The real wire payload: the daemon wraps each session line in the
+  /// packages/protocol ParsedLine envelope.
+  static String envelope(String sessionLineJson) =>
+      jsonEncode({'ok': true, 'line': 1, 'json': jsonDecode(sessionLineJson)});
+
   static String resultLine(String toolUseId, String text) => jsonEncode({
         'uuid': 'r-$toolUseId',
         'type': 'user',
@@ -65,6 +71,19 @@ void main() {
     expect(model.toolResults['t1']!.text, 'done');
     // Reconnect-following after a clean stream end is pinned by follow_test;
     // not duplicated here (its 2s backoff does not fit a fast test window).
+  });
+
+  test('daemon envelope lines render text bubbles', () async {
+    // Wire-shape pin: what arrives in onLine is the daemon's ParsedLine
+    // envelope, and it must render exactly like a bare session line would.
+    final source = FakeSource([FakeSource.envelope(FakeSource.userLine('u1', 'hello'))]);
+    final model = SessionStreamModel(connect: source.connectOpen);
+    model.start(sessionId: 's1');
+    await settle();
+    model.close();
+
+    expect(model.bubbles.length, 1);
+    expect((model.bubbles.single as TextBubble).text, 'hello');
   });
 
   test('loadFullHistory reconnects without tail and keeps bubbles', () async {
