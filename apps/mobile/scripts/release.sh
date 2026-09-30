@@ -42,13 +42,16 @@ flutter build apk --release
 sha=$(sha256sum "$APK" | cut -d' ' -f1)
 stage=$(mktemp -d)
 cp "$APK" "$stage/ccferry.apk"
+# JSON strings cannot hold raw newlines/backslashes; JSON.stringify escapes
+# the notes payload strictly (the quotes guard above stays as a first gate).
+notes_json=$(printf '%s' "$NOTES" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>process.stdout.write(JSON.stringify(s.trimEnd())))")
 cat > "$stage/latest.json" <<EOF
 {
   "version": "$name",
   "versionCode": $code,
   "sha256": "$sha",
   "apk": "ccferry.apk",
-  "notes": "$NOTES"
+  "notes": $notes_json
 }
 EOF
 
