@@ -36,9 +36,9 @@ class UpdateService {
   factory UpdateService.github({http.Client? client}) {
     final inner = client ?? http.Client();
     Uri metaUrl() => Uri.parse(
-        'https://github.com/fetaoily/ccferry/releases/latest/download/latest.json');
+        'https://github.com/weeklyforge/ccferry/releases/latest/download/latest.json');
     Uri apkUrl() => Uri.parse(
-        'https://github.com/fetaoily/ccferry/releases/latest/download/ccferry.apk');
+        'https://github.com/weeklyforge/ccferry/releases/latest/download/ccferry.apk');
     return UpdateService(
       fetchMeta: () async {
         final r = await inner.get(metaUrl()).timeout(const Duration(seconds: 10));

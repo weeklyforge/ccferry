@@ -7,7 +7,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-REPO="fetaoily/ccferry"
+REPO="weeklyforge/ccferry"
 META_URL="https://github.com/$REPO/releases/latest/download/latest.json"
 APK="build/app/outputs/flutter-apk/app-release.apk"
 

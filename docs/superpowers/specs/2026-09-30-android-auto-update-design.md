@@ -45,9 +45,9 @@ M5 发布链路全靠人肉：本机 `flutter build apk` → scp 分块上传到
 ## 4. 发布契约（GitHub Releases）
 
 ```
-元数据:  https://github.com/fetaoily/ccferry/releases/latest/download/latest.json
-安装包:  https://github.com/fetaoily/ccferry/releases/latest/download/ccferry.apk
-历史版:  https://github.com/fetaoily/ccferry/releases/download/v<version>/ccferry.apk
+元数据:  https://github.com/weeklyforge/ccferry/releases/latest/download/latest.json
+安装包:  https://github.com/weeklyforge/ccferry/releases/latest/download/ccferry.apk
+历史版:  https://github.com/weeklyforge/ccferry/releases/download/v<version>/ccferry.apk
 ```
 
 - `releases/latest/download/<asset>` 是 GitHub 官方固定别名，永远重定向到最新 release 的同名资产（已核实 GitHub Docs "Linking to releases"）；历史版本各有 tag 固定链接，不会丢失
