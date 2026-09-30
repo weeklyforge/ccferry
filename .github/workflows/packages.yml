@@ -78,7 +78,7 @@ jobs:
                   -e "s/__RPMARCH__/$rpmarch/" scripts/package/templates/ccferry.spec.in > build/rpmbuild/SPECS/ccferry.spec
               docker run --rm -v "$PWD/build/rpmbuild:/rpmbuild" fedora:40 \
                 bash -c "dnf -y install rpm-build >/dev/null 2>&1 && rpmbuild -bb --define '_topdir /rpmbuild' --target $rpmarch /rpmbuild/SPECS/ccferry.spec"
-              mv build/rpmbuild/RPMS/$rpmarch/*.rpm "dist-packages/"
+              sudo mv build/rpmbuild/RPMS/$rpmarch/*.rpm "dist-packages/"
             done
           done
       - name: Pacman (archlinux container, x86_64)
@@ -92,7 +92,7 @@ jobs:
                 -e "s/__ARCH__/x86_64/" scripts/package/templates/PKGBUILD.in > build/pacman/PKGBUILD
             docker run --rm -v "$PWD/build/pacman:/pkg" archlinux:base \
               bash -c "useradd -m builder 2>/dev/null || true; chown -R builder /pkg; su builder -c 'cd /pkg && makepkg -f --skipinteg --noconfirm'"
-            mv build/pacman/*.pkg.tar.zst "dist-packages/"
+            sudo mv build/pacman/*.pkg.tar.zst "dist-packages/"
           done
       - uses: actions/upload-artifact@v4
         with: { name: linux, path: dist-packages/, if-no-files-found: error }

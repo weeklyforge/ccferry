@@ -57,7 +57,8 @@ console.log(`sidecar: fetching ${platform} from ${tarball}`);
   const buf = Buffer.from(await res.arrayBuffer());
   require('node:fs').writeFileSync(tgz, buf);
   const tar = process.platform === 'win32' ? 'tar' : 'tar';
-  execFileSync(tar, ['-xzf', tgz, '-C', tmp, 'package'], { stdio: 'inherit' });
+  // GNU tar (git-bash on windows runners) reads C:\ as host:file without this
+  execFileSync(tar, ['--force-local', '-xzf', tgz, '-C', tmp, 'package'], { stdio: 'inherit' });
   copyFileSync(join(tmp, 'package', binname), out);
   rmSync(tmp, { recursive: true, force: true });
   console.log(`sidecar: wrote ${out}`);
