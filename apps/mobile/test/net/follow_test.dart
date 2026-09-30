@@ -62,6 +62,28 @@ void main() {
     expect(connects, after);
   });
 
+  test('reassembles frames split across stream chunks', () async {
+    // Real sockets cut the byte stream at arbitrary offsets — a frame almost
+    // never arrives aligned with a chunk. The follower must buffer through
+    // SseFrameSplitter, not treat each chunk as a complete frame.
+    final lines = <String>[];
+    final handle = followSse(
+      connect: () async => Stream.fromIterable(const [
+        'data: {"a"',
+        ':1}\n\ndata: he',
+        'llo\n\n',
+      ]),
+      onLine: lines.add,
+      onReset: () {},
+      delay: (_) => Future<void>.delayed(const Duration(milliseconds: 1)),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    handle.close();
+    // A clean stream end reconnects (pinned above), so the replayed window
+    // can append more deliveries — pin the FIRST pass's shape and order.
+    expect(lines.take(2), ['{"a":1}', 'hello']);
+  });
+
   test('stream ending without error also triggers a reconnect', () async {
     var connects = 0;
     final handle = followSse(
