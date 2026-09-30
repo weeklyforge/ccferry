@@ -76,7 +76,11 @@ jobs:
               tar --exclude=DEBIAN -czf build/rpmbuild/SOURCES/staging.tar.gz -C "build/ccferry-$product-$platform" .
               sed -e "s/__PRODUCT__/$product/" -e "s/__VERSION__/$ver/" \
                   -e "s/__RPMARCH__/$rpmarch/" scripts/package/templates/ccferry.spec.in > build/rpmbuild/SPECS/ccferry.spec
-              docker run --rm -v "$PWD/build/rpmbuild:/rpmbuild" fedora:40 \
+              # Cross-arch rpm: build natively under qemu emulation instead of
+              # fighting rpmbuild's host-arch compatibility table (GH ubuntu
+              # runners ship qemu binfmt for multi-arch containers).
+              dockerplat=""; [ "$rpmarch" = aarch64 ] && dockerplat="--platform linux/arm64"
+              docker run --rm $dockerplat -v "$PWD/build/rpmbuild:/rpmbuild" fedora:40 \
                 bash -c "dnf -y install rpm-build >/dev/null 2>&1 && rpmbuild -bb --define '_topdir /rpmbuild' --target $rpmarch-linux /rpmbuild/SPECS/ccferry.spec"
               sudo mv build/rpmbuild/RPMS/$rpmarch/*.rpm "dist-packages/"
             done
