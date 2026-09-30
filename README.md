@@ -44,4 +44,5 @@ CCFERRY_TOKEN=<token> CCFERRY_HOST=0.0.0.0 pnpm --filter @ccferry/client start
 - **不设 `CCFERRY_TOKEN` 时强制只绑 127.0.0.1**（安全默认）；`CCFERRY_PORT`/`CCFERRY_PWA_DIR` 可覆盖端口与 PWA 目录
 - daemon 配置 `~/.ccferry/config.json`：`vaultPath`（知识库根，未配则 `/api/vault/*` 返回 503）、`toolWhitelist`（无人值守放行的只读工具，默认 `Read/Glob/Grep/LS/TodoWrite`）、`approvalTimeoutMs`（审批超时即拒，默认 60s）
 - 测试：`pnpm -r test`；类型检查：`pnpm -r typecheck`
+- **生产部署（单包 exe + 各操作系统自启配置）见 [`docs/deploy-daemon.md`](docs/deploy-daemon.md)**——上面的 pnpm 命令是开发形态
 
