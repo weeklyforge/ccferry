@@ -153,4 +153,97 @@ void main() {
     await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
     await tester.pumpAndSettle(); // completes without throwing
   });
+
+  testWidgets('typing swaps in search results and a tap opens the note', (tester) async {
+    final client = ApiClient(
+      client: MockClient((req) async {
+        if (req.url.path == '/api/vault/tree') return treeResponse();
+        if (req.url.path == '/api/vault/search') {
+          return jsonResponse({
+            'matches': [
+              {'path': '项目管理/索引.md', 'line': 3, 'text': '京能 部署架构'},
+            ],
+          });
+        }
+        return jsonResponse({}, 404);
+      }),
+      base: () => Uri.parse('https://x.example'),
+      token: () => 'tok',
+    );
+    final pushed = <String?>[];
+    await tester.pumpWidget(harness(
+      client,
+      onGenerateRoute: (s) {
+        pushed.add(s.name);
+        return MaterialPageRoute<void>(builder: (_) => const Scaffold(body: Text('NOTE')));
+      },
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '部署');
+    await tester.pump(const Duration(milliseconds: 400)); // past the debounce
+    await tester.pumpAndSettle();
+    expect(find.text('京能 部署架构'), findsOneWidget);
+    expect(find.text('项目管理/索引.md'), findsOneWidget);
+    expect(find.text('f0.md'), findsNothing); // browse list replaced
+
+    await tester.tap(find.text('京能 部署架构'));
+    await tester.pumpAndSettle();
+    expect(pushed.last, '/note');
+  });
+
+  testWidgets('clearing the query restores the browse list', (tester) async {
+    final client = ApiClient(
+      client: MockClient((req) async {
+        if (req.url.path == '/api/vault/tree') return treeResponse();
+        return jsonResponse({'matches': []});
+      }),
+      base: () => Uri.parse('https://x.example'),
+      token: () => 'tok',
+    );
+    await tester.pumpWidget(harness(client));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'x');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('无匹配结果'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '');
+    await tester.pumpAndSettle();
+    expect(find.text('f0.md'), findsOneWidget); // browse list is back
+  });
+
+  testWidgets('shows the not-configured empty state on 503', (tester) async {
+    final client = ApiClient(
+      client: MockClient((req) async => jsonResponse({'error': 'vault_not_configured'}, 503)),
+      base: () => Uri.parse('https://x.example'),
+      token: () => 'tok',
+    );
+    await tester.pumpWidget(harness(client));
+    await tester.pumpAndSettle();
+
+    expect(find.text('知识库未配置'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing); // no dead search box
+  });
+
+  testWidgets('shows a retryable error state when the tree fetch fails', (tester) async {
+    var down = true;
+    final client = ApiClient(
+      client: MockClient((req) async {
+        if (down) throw Exception('offline');
+        return treeResponse();
+      }),
+      base: () => Uri.parse('https://x.example'),
+      token: () => 'tok',
+    );
+    await tester.pumpWidget(harness(client));
+    await tester.pumpAndSettle();
+    expect(find.text('加载失败'), findsOneWidget);
+
+    down = false;
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+    expect(find.text('f0.md'), findsOneWidget);
+  });
 }
