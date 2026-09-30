@@ -77,7 +77,7 @@ jobs:
               sed -e "s/__PRODUCT__/$product/" -e "s/__VERSION__/$ver/" \
                   -e "s/__RPMARCH__/$rpmarch/" scripts/package/templates/ccferry.spec.in > build/rpmbuild/SPECS/ccferry.spec
               docker run --rm -v "$PWD/build/rpmbuild:/rpmbuild" fedora:40 \
-                bash -c "rpmbuild -bb --define '_topdir /rpmbuild' --target $rpmarch /rpmbuild/SPECS/ccferry.spec"
+                bash -c "dnf -y install rpm-build >/dev/null 2>&1 && rpmbuild -bb --define '_topdir /rpmbuild' --target $rpmarch /rpmbuild/SPECS/ccferry.spec"
               mv build/rpmbuild/RPMS/$rpmarch/*.rpm "dist-packages/"
             done
           done

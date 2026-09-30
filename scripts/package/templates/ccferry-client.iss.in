@@ -29,4 +29,4 @@ Name: "autostart"; Description: "Register the logon autostart task (recommended)
 
 [Run]
 Filename: "schtasks"; Parameters: "/create /f /tn ccferry-daemon /tr ""wscript.exe """"{app}\start-daemon-hidden.vbs"""""" /sc onlogon"; Tasks: autostart; Flags: runhidden
-Filename: "{app}\README.txt"; Description: "Open the quick-start notes"; Flags: postskipifnotrun shellexec unchecked
+Filename: "{app}\README.txt"; Description: "Open the quick-start notes"; Flags: postinstall shellexec unchecked skipifsilent
