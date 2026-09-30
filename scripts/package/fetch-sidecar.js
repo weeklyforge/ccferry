@@ -56,9 +56,10 @@ console.log(`sidecar: fetching ${platform} from ${tarball}`);
   if (!res.ok) throw new Error(`registry fetch failed: ${res.status}`);
   const buf = Buffer.from(await res.arrayBuffer());
   require('node:fs').writeFileSync(tgz, buf);
-  const tar = process.platform === 'win32' ? 'tar' : 'tar';
-  // GNU tar (git-bash on windows runners) reads C:\ as host:file without this
-  execFileSync(tar, ['--force-local', '-xzf', tgz, '-C', tmp, 'package'], { stdio: 'inherit' });
+  // GNU tar (git-bash on windows runners) reads C:\ as host:file without
+  // --force-local; bsdtar on macOS rejects the flag, so gate it per platform
+  const forceLocal = process.platform === 'win32' ? ['--force-local'] : [];
+  execFileSync('tar', [...forceLocal, '-xzf', tgz, '-C', tmp, 'package'], { stdio: 'inherit' });
   copyFileSync(join(tmp, 'package', binname), out);
   rmSync(tmp, { recursive: true, force: true });
   console.log(`sidecar: wrote ${out}`);
