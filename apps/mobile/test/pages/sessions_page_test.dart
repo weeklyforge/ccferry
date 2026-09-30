@@ -20,6 +20,8 @@ import 'package:ccferry_mobile/update/update_dialog.dart';
 import 'package:ccferry_mobile/update/update_model.dart';
 import 'package:ccferry_mobile/update/update_release.dart';
 import 'package:ccferry_mobile/update/update_service.dart';
+import 'package:ccferry_mobile/pages/vault_page.dart';
+import 'package:ccferry_mobile/vault/vault_model.dart';
 
 class MemoryStore implements SecureStore {
   final values = <String, String>{};
@@ -83,7 +85,14 @@ UpdateModel updateWithMeta(UpdateRelease? meta) => UpdateModel(
 const newerRelease = UpdateRelease(
     version: '9.9.9', versionCode: 99, sha256: 'a', apk: 'ccferry.apk', notes: '- 修复大问题');
 
-Widget harness({required ApprovalsModel approvals, required SessionsModel model, ApiClient? client, UpdateModel? update}) =>
+Widget harness({
+  required ApprovalsModel approvals,
+  required SessionsModel model,
+  ApiClient? client,
+  UpdateModel? update,
+  VaultModel? vault,
+  void Function(String?)? onRoute,
+}) =>
     MultiProvider(
       providers: [
         Provider<ApiClient>.value(value: client!),
@@ -92,8 +101,17 @@ Widget harness({required ApprovalsModel approvals, required SessionsModel model,
         ChangeNotifierProvider<SessionsModel>.value(value: model),
         ChangeNotifierProvider<ConnectionModel>.value(value: ConnectionModel()),
         ChangeNotifierProvider<UpdateModel>.value(value: update ?? updateWithMeta(null)),
+        ChangeNotifierProvider<VaultModel>.value(value: vault ?? VaultModel(client: client)),
       ],
-      child: const MaterialApp(home: SessionsPage()),
+      child: MaterialApp(
+        home: const SessionsPage(),
+        onGenerateRoute: onRoute == null
+            ? null
+            : (s) {
+                onRoute(s.name);
+                return MaterialPageRoute<void>(builder: (_) => Scaffold(body: Text('ROUTE:${s.name}')));
+              },
+      ),
     );
 
 void main() {
@@ -367,6 +385,78 @@ void main() {
     await tester.tap(find.text('立即安装'));
     await tester.pumpAndSettle();
     expect(calls, ['installApk', 'openInstallPermissionSettings']);
+  });
+
+  testWidgets('book icon pushes /vault', (tester) async {
+    final client = routedClient(onLoad: (_) {});
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+    final pushed = <String?>[];
+
+    await tester.pumpWidget(harness(
+      approvals: approvals,
+      model: model,
+      client: client,
+      onRoute: (name) => pushed.add(name),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.menu_book_outlined), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.menu_book_outlined));
+    await tester.pumpAndSettle();
+    expect(pushed.last, '/vault');
+  });
+
+  testWidgets('vault route resolves with providers below the navigator (production shape)',
+      (tester) async {
+    final client = routedClient(onLoad: (_) {});
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+    final vault = VaultModel(client: ApiClient(
+      client: MockClient((req) async {
+        if (req.url.path == '/api/vault/tree') {
+          return http.Response.bytes(utf8.encode(jsonEncode({'root': '/v', 'tree': []})), 200);
+        }
+        return http.Response(jsonEncode({}), 404);
+      }),
+      base: () => Uri.parse('https://x'),
+      token: () => 't',
+    ));
+
+    // Mirror main.dart: providers sit inside `home:`, the pushed route
+    // rebuilds them via .value on the root navigator.
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<ApiClient>.value(value: client),
+          ChangeNotifierProvider<AuthModel>.value(value: AuthModel(store: MemoryStore())),
+          ChangeNotifierProvider<ApprovalsModel>.value(value: approvals),
+          ChangeNotifierProvider<SessionsModel>.value(value: model),
+          ChangeNotifierProvider<ConnectionModel>.value(value: ConnectionModel()),
+          ChangeNotifierProvider<UpdateModel>.value(value: updateWithMeta(null)),
+          ChangeNotifierProvider<VaultModel>.value(value: vault),
+        ],
+        child: MaterialApp(
+          home: const SessionsPage(),
+          onGenerateRoute: (s) => s.name == '/vault'
+              ? MaterialPageRoute<void>(
+                  builder: (_) => MultiProvider(
+                    providers: [
+                      Provider<ApiClient>.value(value: client),
+                      ChangeNotifierProvider<VaultModel>.value(value: vault),
+                    ],
+                    child: const VaultPage(),
+                  ),
+                )
+              : null,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.menu_book_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('知识库'), findsOneWidget); // vault page reachable, provider resolved
   });
 }
 

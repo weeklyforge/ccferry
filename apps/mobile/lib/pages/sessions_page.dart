@@ -162,6 +162,11 @@ class _SessionsPageState extends State<SessionsPage> {
             child: Center(child: _connectionBadge(conn.state)),
           ),
           IconButton(
+            icon: const Icon(Icons.menu_book_outlined),
+            tooltip: '知识库',
+            onPressed: () => Navigator.of(context).pushNamed('/vault'),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: '设置',
             onPressed: () => Navigator.of(context).pushNamed('/settings'),

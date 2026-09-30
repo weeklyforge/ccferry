@@ -19,6 +19,9 @@ import 'package:ccferry_mobile/state/secure_store.dart';
 import 'package:ccferry_mobile/state/sessions_model.dart';
 import 'package:ccferry_mobile/update/update_model.dart';
 import 'package:ccferry_mobile/update/update_service.dart';
+import 'package:ccferry_mobile/pages/note_page.dart';
+import 'package:ccferry_mobile/pages/vault_page.dart';
+import 'package:ccferry_mobile/vault/vault_model.dart';
 
 void main() {
   runApp(const CcferryApp());
@@ -41,6 +44,7 @@ class _CcferryAppState extends State<CcferryApp> {
   ApiClient? _client;
   ApprovalsModel? _approvals;
   SessionsModel? _sessions;
+  VaultModel? _vault;
   PushService? _push;
   // App-lifetime: the badge state must survive page rebuilds.
   final ConnectionModel _connection = ConnectionModel();
@@ -72,6 +76,7 @@ class _CcferryAppState extends State<CcferryApp> {
     );
     _approvals = ApprovalsModel(client: _client!);
     _sessions = SessionsModel(client: _client!, approvals: _approvals!);
+    _vault = VaultModel(client: _client!);
     _push = PushService(client: _client!, clientId: _auth.clientId!);
   }
 
@@ -123,6 +128,32 @@ class _CcferryAppState extends State<CcferryApp> {
             ),
           );
         }
+        if (settings.name == '/vault') {
+          // Same root-navigator provider shape as /settings.
+          return MaterialPageRoute<void>(
+            settings: settings,
+            builder: (ctx) => MultiProvider(
+              providers: [
+                Provider<ApiClient>.value(value: _client!),
+                ChangeNotifierProvider<VaultModel>.value(value: _vault!),
+              ],
+              child: const VaultPage(),
+            ),
+          );
+        }
+        if (settings.name == '/note') {
+          final path = settings.arguments as String;
+          return MaterialPageRoute<void>(
+            settings: settings,
+            builder: (ctx) => MultiProvider(
+              providers: [
+                Provider<ApiClient>.value(value: _client!),
+                ChangeNotifierProvider<VaultModel>.value(value: _vault!),
+              ],
+              child: NotePage(path: path),
+            ),
+          );
+        }
         return null;
       },
       home: !_booted
@@ -148,6 +179,7 @@ class _CcferryAppState extends State<CcferryApp> {
         ChangeNotifierProvider<SessionsModel>.value(value: _sessions!),
         ChangeNotifierProvider<ConnectionModel>.value(value: _connection),
         ChangeNotifierProvider<UpdateModel>.value(value: _update),
+        ChangeNotifierProvider<VaultModel>.value(value: _vault!),
       ],
       child: const SessionsPage(),
     );
