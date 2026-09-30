@@ -18,9 +18,15 @@ class _VaultPageState extends State<VaultPage> {
   @override
   void initState() {
     super.initState();
-    // Refresh on every entry (spec D4); an old tree stays visible meanwhile.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<VaultModel>().refresh();
+      if (!mounted) return;
+      final vault = context.read<VaultModel>();
+      // The model is app-lifetime but the search box is per-page: drop any
+      // results a previous visit left behind, or they render under an
+      // empty-looking box (also bumps the sequence, killing stale requests).
+      vault.search('');
+      // Refresh on every entry (spec D4); an old tree stays visible meanwhile.
+      vault.refresh();
     });
   }
 

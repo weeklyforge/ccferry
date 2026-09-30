@@ -246,4 +246,57 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('f0.md'), findsOneWidget);
   });
+
+  testWidgets('re-entering the vault page drops the previous search state', (tester) async {
+    final client = ApiClient(
+      client: MockClient((req) async {
+        if (req.url.path == '/api/vault/tree') return treeResponse();
+        return jsonResponse({
+          'matches': [
+            {'path': '项目管理/索引.md', 'line': 3, 'text': '京能 部署架构'},
+          ],
+        });
+      }),
+      base: () => Uri.parse('https://x.example'),
+      token: () => 'tok',
+    );
+    // The model is app-lifetime (shared); the page state (and its empty
+    // search box) is recreated on every route push — so drive real routes,
+    // not pumpWidget-over-the-same-tree (which would reuse the state).
+    final model = VaultModel(client: client);
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        Provider<ApiClient>.value(value: client),
+        ChangeNotifierProvider<VaultModel>.value(value: model),
+      ],
+      child: MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) => TextButton(
+              onPressed: () => Navigator.of(ctx).pushNamed('/vault'),
+              child: const Text('OPEN'),
+            ),
+          ),
+        ),
+        onGenerateRoute: (s) => s.name == '/vault'
+            ? MaterialPageRoute<void>(builder: (_) => const VaultPage())
+            : null,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('OPEN'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '部署');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('京能 部署架构'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('OPEN')); // re-entry: fresh state, same model
+    await tester.pumpAndSettle();
+    expect(find.text('f0.md'), findsOneWidget); // browse list, not stale results
+    expect(find.text('京能 部署架构'), findsNothing);
+  });
 }
