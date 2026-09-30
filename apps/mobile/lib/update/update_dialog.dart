@@ -30,12 +30,33 @@ class UpdateDialog extends StatefulWidget {
   State<UpdateDialog> createState() => _UpdateDialogState();
 }
 
-class _UpdateDialogState extends State<UpdateDialog> {
+class _UpdateDialogState extends State<UpdateDialog> with WidgetsBindingObserver {
   final UpdateInstaller _installer = UpdateInstaller();
   bool _autoInstallFired = false;
   bool _needPermission = false;
 
-  Future<void> _install() async {
+  // Granting happens in system settings; coming back resumes the install
+  // without another tap. Quiet retry: the user may have declined on purpose.
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _needPermission) {
+      _install(openWhenDenied: false);
+    }
+  }
+
+  Future<void> _install({bool openWhenDenied = true}) async {
     final update = context.read<UpdateModel>();
     final path = update.downloadedApkPath;
     if (path == null) return;
@@ -44,6 +65,9 @@ class _UpdateDialogState extends State<UpdateDialog> {
       if (!mounted) return;
       if (verdict == 'need_permission') {
         setState(() => _needPermission = true);
+        // An install tap must never dead-end silently: route to the grant
+        // toggle page right away.
+        if (openWhenDenied) await _installer.openPermissionSettings();
       }
     } catch (_) {
       if (!mounted) return;

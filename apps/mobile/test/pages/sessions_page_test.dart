@@ -16,6 +16,7 @@ import 'package:ccferry_mobile/state/auth_model.dart';
 import 'package:ccferry_mobile/state/connection_model.dart';
 import 'package:ccferry_mobile/state/secure_store.dart';
 import 'package:ccferry_mobile/state/sessions_model.dart';
+import 'package:ccferry_mobile/update/update_dialog.dart';
 import 'package:ccferry_mobile/update/update_model.dart';
 import 'package:ccferry_mobile/update/update_release.dart';
 import 'package:ccferry_mobile/update/update_service.dart';
@@ -320,6 +321,46 @@ void main() {
 
     expect(installCalls, 1);
     expect(find.text('立即安装'), findsOneWidget);
+  });
+
+  testWidgets('install without the grant routes to the toggle page and retries on resume', (tester) async {
+    final client = routedClient(onLoad: (_) {});
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+    final update = updateWithMeta(newerRelease);
+    final calls = <String>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('ccferry/install'), (call) async {
+      calls.add(call.method);
+      return call.method == 'installApk' ? 'need_permission' : null;
+    });
+    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('ccferry/install'), null));
+
+    await tester.pumpWidget(harness(approvals: approvals, model: model, client: client, update: update));
+    await tester.pumpAndSettle(); // dialog open on available
+    update.debugCompleteDownload('/cache/ccferry-update.apk');
+    await tester.pumpAndSettle();
+
+    // The auto-fire must never dead-end silently: with the grant missing it
+    // routes straight to the unknown-sources toggle page.
+    expect(calls, ['installApk', 'openInstallPermissionSettings']);
+
+    // Granting happens in system settings; returning to the app resumes the
+    // retry quietly (no second yank when the user came back without granting).
+    // Dispatched directly on the dialog state — the production path is the
+    // WidgetsBindingObserver callback the dialog registers in initState.
+    calls.clear();
+    (tester.state(find.byType(UpdateDialog)) as dynamic)
+        .didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(calls, ['installApk']);
+
+    // An explicit tap while still ungranted re-routes to the toggle page.
+    calls.clear();
+    await tester.tap(find.text('立即安装'));
+    await tester.pumpAndSettle();
+    expect(calls, ['installApk', 'openInstallPermissionSettings']);
   });
 }
 
