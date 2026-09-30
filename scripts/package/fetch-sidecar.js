@@ -43,9 +43,10 @@ if (platform === hostPlatform) {
 }
 
 const tarball = execFileSync(
-  'npm',
+  process.platform === 'win32' ? 'npm.cmd' : 'npm',
   ['view', `@anthropic-ai/claude-agent-sdk-${platform}@${sdkVersion}`, 'dist.tarball'],
-  { encoding: 'utf8' },
+  // .cmd shims on Windows are not directly spawnable
+  { encoding: 'utf8', shell: process.platform === 'win32' },
 ).trim();
 const tmp = mkdtempSync(join(tmpdir(), 'sidecar-'));
 const tgz = join(tmp, 'sidecar.tgz');

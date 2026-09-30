@@ -1,3 +1,4 @@
+%define debug_package %{nil}
 Name: ccferry-__PRODUCT__
 Version: __VERSION__
 Release: 1%{?dist}

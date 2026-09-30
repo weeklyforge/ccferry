@@ -73,7 +73,7 @@ jobs:
             for pair in "x86_64 linux-x64" "aarch64 linux-arm64"; do
               set -- $pair; rpmarch=$1; platform=$2
               mkdir -p build/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-              tar -czf build/rpmbuild/SOURCES/staging.tar.gz -C "build/ccferry-$product-$platform" .
+              tar --exclude=DEBIAN -czf build/rpmbuild/SOURCES/staging.tar.gz -C "build/ccferry-$product-$platform" .
               sed -e "s/__PRODUCT__/$product/" -e "s/__VERSION__/$ver/" \
                   -e "s/__RPMARCH__/$rpmarch/" scripts/package/templates/ccferry.spec.in > build/rpmbuild/SPECS/ccferry.spec
               docker run --rm -v "$PWD/build/rpmbuild:/rpmbuild" fedora:40 \
@@ -87,7 +87,7 @@ jobs:
           for product in cloud client; do
             ver=$(node -p "require('./packages/$product/package.json').version")
             mkdir -p build/pacman && rm -f build/pacman/*
-            tar -czf build/pacman/staging.tar.gz -C "build/ccferry-$product-linux-x64" .
+            tar --exclude=DEBIAN -czf build/pacman/staging.tar.gz -C "build/ccferry-$product-linux-x64" .
             sed -e "s/__PRODUCT__/$product/" -e "s/__VERSION__/$ver/" \
                 -e "s/__ARCH__/x86_64/" scripts/package/templates/PKGBUILD.in > build/pacman/PKGBUILD
             docker run --rm -v "$PWD/build/pacman:/pkg" archlinux:base \
