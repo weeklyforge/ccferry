@@ -25,6 +25,7 @@ FollowHandle followSse({
   required void Function(String data) onLine,
   required void Function() onReset,
   required Future<void> Function(Duration d) delay,
+  void Function()? onOpen,
   Duration retryMs = const Duration(seconds: 2),
   Duration maxRetryMs = const Duration(seconds: 30),
 }) {
@@ -36,6 +37,7 @@ FollowHandle followSse({
     while (!closed) {
       try {
         final stream = await connect();
+        onOpen?.call(); // transport up — one signal per successful connect
         attempt = 0; // healthy again — next drop retries fast
         final completer = Completer<void>();
         sub = parseSse(stream).listen(

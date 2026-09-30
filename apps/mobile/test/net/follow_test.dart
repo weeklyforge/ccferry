@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:ccferry_mobile/net/follow.dart';
 
@@ -39,6 +41,27 @@ void main() {
     // pin delivery, not a single line.
     expect(lines, isNotEmpty);
     expect(lines.first, 'hello');
+  });
+
+  test('onOpen fires once per successful connect, never on failures', () async {
+    var opens = 0;
+    var attempts = 0;
+    final handle = followSse(
+      connect: () async {
+        attempts++;
+        if (attempts < 3) throw StateError('down');
+        // Never completes: no clean-end reconnect cycles, so opens stays 1.
+        return StreamController<String>().stream;
+      },
+      onLine: (_) {},
+      onReset: () {},
+      onOpen: () => opens++,
+      delay: (_) => Future<void>.delayed(const Duration(milliseconds: 1)),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    handle.close();
+    expect(attempts, greaterThanOrEqualTo(3));
+    expect(opens, 1);
   });
 
   test('close cancels pending reconnects', () async {
