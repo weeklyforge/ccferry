@@ -1,4 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import type { DriverEvent, ParsedLine, ProjectSummary, SessionSummary } from '@ccferry/protocol';
 import { parseLine } from '../session/parse';
 import { scanStore } from '../session/scanner';
@@ -12,6 +14,20 @@ export interface SdkDriverOptions {
   broker?: ApprovalBroker;
   whitelist?: readonly string[];
   scan?: ScanFn;
+  execPath?: string;
+  exists?: (path: string) => boolean;
+}
+
+// Compiled single-package form (spec D5'): bun --compile bundles JS only, so
+// the SDK's native CLI binary ships as a sibling file next to the exe and is
+// passed explicitly. Dev form (node + tsx) resolves from the module tree as
+// before — nothing sits beside node.exe.
+export function besideExecutableClaude(
+  execPath: string,
+  exists: (path: string) => boolean,
+): string | undefined {
+  const beside = join(dirname(execPath), process.platform === 'win32' ? 'claude.exe' : 'claude');
+  return exists(beside) ? beside : undefined;
 }
 
 interface SdkMessage {
@@ -49,6 +65,7 @@ export function mapSdkMessages(messages: SdkMessage[]): DriverEvent[] {
 export class SdkDriver implements SessionDriver {
   private readonly whitelist: readonly string[];
   private readonly scan: ScanFn;
+  private readonly claudeExecutable: string | undefined;
   private currentSessionId: string | null = null;
 
   private readonly canUseTool: ReturnType<typeof createCanUseTool>;
@@ -59,6 +76,10 @@ export class SdkDriver implements SessionDriver {
   ) {
     this.whitelist = options.whitelist ?? DEFAULT_TOOL_WHITELIST;
     this.scan = options.scan ?? scanStore;
+    this.claudeExecutable = besideExecutableClaude(
+      options.execPath ?? process.execPath,
+      options.exists ?? existsSync,
+    );
     this.canUseTool = createCanUseTool(this.whitelist, this.options.broker, () => this.currentSessionId);
   }
 
@@ -91,6 +112,7 @@ export class SdkDriver implements SessionDriver {
         resume: input.sessionId ?? undefined,
         cwd: input.projectPath,
         canUseTool: this.canUseTool,
+        pathToClaudeCodeExecutable: this.claudeExecutable,
       },
     })) {
       const msg = message as SdkMessage & { session_id?: string };
