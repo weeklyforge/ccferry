@@ -1,48 +1,52 @@
 # ccferry
 
-给电脑上的 Claude Code 做远程分身：出门在外时**监控进行中的开发会话、续聊、远程批权限、收完成推送**，并**管理个人知识库**（浏览/搜索/编辑/指挥 agent 整理）。
+[English](README.md) | [中文](README.zh-CN.md)
 
-## 核心思路
+A remote companion for the Claude Code running on your PC: **monitor live coding sessions from anywhere, continue conversations, route tool approvals to your phone, receive push notifications**, and **manage your personal knowledge base** (browse / search / edit / command an agent to tidy it).
 
-Claude Code 的每个会话都是本地 JSONL 文件（`~/.claude/projects/<项目>/<session-id>.jsonl`），本地 TUI 只是视图之一。ccferry 给同一份会话数据长出第二个视图：
+## How it works
 
-- **监控面（只读）**：watch 会话文件实时流出——本地正在跑的任务也能看，零干扰
-- **操作面（读写）**：Agent SDK `resume` 空闲会话接完整历史；`canUseTool` 权限请求路由到远端批准
-- **知识库（一期核心）**：vault 是其中一个「项目」，浏览/搜索/编辑直连文件系统；「agent 整理」= 对 vault 会话发指令
+Every Claude Code session is a local JSONL file (`~/.claude/projects/<project>/<session-id>.jsonl`); the local TUI is just one view over it. ccferry grows a second view over the same data:
 
-## 架构
+- **Read plane (zero interference)**: a watcher tails the session files live — you can watch a task that is currently running locally
+- **Write plane**: the Agent SDK `resume`s idle sessions with full history; `canUseTool` permission requests are routed to your phone for approval
+- **Knowledge base (day-one core)**: your Obsidian vault is just another "project" — browse / search / edit hit the file system directly; "agent tidy" sends instructions to a vault session
+
+## Architecture
 
 ```
-手机/浏览器 ──HTTPS──▶ 云服务器（静态 PWA + 自研隧道协议服务端）
-                          ⟵ WSS 单出站长连接（自研 6 帧协议）⟵
-                    PC agent 客户端（Agent SDK + 会话 watcher + 知识库服务 + localhost API）
+Phone / browser ──HTTPS──▶ Cloud server (static PWA + tunnel-protocol server)
+                             ⟵ WSS single outbound connection (6-frame private protocol) ⟵
+                       PC agent (Agent SDK + session watcher + vault service + localhost API)
 ```
 
-单包原则：PC 端一个进程，云端一个进程，全 TypeScript monorepo。
+Single-package principle: one process on the PC, one on the cloud, all-TypeScript monorepo.
 
-## 状态
+## Status
 
-| 里程碑 | 内容 | 状态 |
+| Milestone | Scope | Status |
 |---|---|---|
-| M1 | PC 裸跑 daemon + localhost API | ✅ 2026-09-26（计划 → `docs/superpowers/plans/2026-09-26-m1-local-daemon.md`） |
-| M2 | PWA + 权限路由 + 知识库管理（局域网） | ✅ 2026-09-26（计划 → `docs/superpowers/plans/2026-09-26-m2-lan-pwa-vault.md`） |
-| M3 | 私有隧道协议 + 云部署 + 推送 | 待启动 |
-| M4 | 历史页 + 打磨 | 待 M3 |
+| M1 | PC daemon + localhost API | ✅ 2026-09-26 |
+| M2 | PWA + remote approvals + vault management (LAN) | ✅ 2026-09-26 |
+| M3 | Private tunnel protocol + cloud deploy + Web Push | ✅ 2026-09-26 |
+| M4 | History page + remote new tasks + polish | ✅ 2026-09-28 |
+| M5 | Flutter native app (FCM push, approvals, self-update) | ✅ 2026-09-30 |
 
-- 设计 spec：`docs/superpowers/specs/2026-09-25-claude-code-remote.md`（总）· `docs/superpowers/specs/2026-09-26-m2-lan-pwa-vault-design.md`（M2）
-- 证据日志：`docs/notes/m1-findings.md` · `docs/notes/m2-findings.md`
+Mobile clients: the **Flutter app** (`apps/mobile`, Android APK self-updated via GitHub Releases) is the primary entry; the **PWA** stays as the web entry until the second batch of capabilities lands.
 
-## 运行（M2 起）
+- Specs & plans: `docs/superpowers/specs/` · `docs/superpowers/plans/`
+- Evidence logs: `docs/notes/m1-findings.md` … `m4-findings.md`
+
+## Running (dev form)
 
 ```bash
 pnpm install
-pnpm --filter @ccferry/pwa build          # 产出 packages/pwa/dist，daemon 静态托管
+pnpm --filter @ccferry/pwa build          # produces packages/pwa/dist served by the daemon
 CCFERRY_TOKEN=<token> CCFERRY_HOST=0.0.0.0 pnpm --filter @ccferry/client start
 ```
 
-- 手机同 Wi-Fi 访问 `http://<PC局域网IP>:8787/`，设置页输入令牌一次
-- **不设 `CCFERRY_TOKEN` 时强制只绑 127.0.0.1**（安全默认）；`CCFERRY_PORT`/`CCFERRY_PWA_DIR` 可覆盖端口与 PWA 目录
-- daemon 配置 `~/.ccferry/config.json`：`vaultPath`（知识库根，未配则 `/api/vault/*` 返回 503）、`toolWhitelist`（无人值守放行的只读工具，默认 `Read/Glob/Grep/LS/TodoWrite`）、`approvalTimeoutMs`（审批超时即拒，默认 60s）
-- 测试：`pnpm -r test`；类型检查：`pnpm -r typecheck`
-- **生产部署（单包 exe + 各操作系统自启配置）见 [`docs/deploy-daemon.md`](docs/deploy-daemon.md)**——上面的 pnpm 命令是开发形态
-
+- Open `http://<pc-lan-ip>:8787/` on a phone on the same Wi-Fi; enter the token once in settings
+- **Without `CCFERRY_TOKEN` the daemon binds 127.0.0.1 only** (safe default); `CCFERRY_PORT` / `CCFERRY_PWA_DIR` override the port and PWA directory
+- Daemon config `~/.ccferry/config.json`: `vaultPath` (knowledge-base root; unconfigured → `/api/vault/*` returns 503), `toolWhitelist` (read-only tools allowed unattended, default `Read/Glob/Grep/LS/TodoWrite`), `approvalTimeoutMs` (approval timeout denies, default 60s)
+- Tests: `pnpm -r test`; typecheck: `pnpm -r typecheck`
+- **Production deployment (single-package binaries + per-OS autostart) → [`docs/deploy-daemon.md`](docs/deploy-daemon.md)** — the pnpm command above is the dev form
