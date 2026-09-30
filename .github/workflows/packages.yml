@@ -29,7 +29,7 @@ jobs:
       - name: Build binaries + tarballs + debs
         run: |
           set -euxo pipefail
-          mkdir -p dist-packages build
+          mkdir -p dist-single dist-packages build
           build() { # <product> <platform> <debarch|''>
             local product=$1 platform=$2 debarch=$3
             (cd "packages/$product" && bun build --compile --target "bun-$platform" src/main.ts \
@@ -42,7 +42,7 @@ jobs:
             local root="build/ccferry-$product-$platform"
             rm -rf "$root" && bash scripts/package/stage.sh "$product" "$platform" "$root" "$sidecar"
             local ver; ver=$(node -p "require('./packages/$product/package.json').version")
-            tar --owner=0 --group=0 --numeric-owner -czf \
+            tar --uid 0 --gid 0 -czf \
               "dist-packages/ccferry-$product-${ver}-${platform}.tar.gz" -C "$root" .
             if [ -n "$debarch" ]; then
               mkdir -p "$root/DEBIAN"
@@ -54,7 +54,7 @@ jobs:
                 printf '#!/bin/sh\nset -e\necho "ccferry-client: enable the per-user daemon with:"\necho "  mkdir -p ~/.config/systemd/user && cp /usr/share/ccferry/systemd/ccferry.service ~/.config/systemd/user/"\necho "  systemctl --user daemon-reload && systemctl --user enable --now ccferry"\n' > "$root/DEBIAN/postinst"
               fi
               chmod 755 "$root/DEBIAN/postinst"
-              dpkg-deb --root "$root" --build "dist-packages/ccferry-$product_${ver}_${debarch}.deb"
+              dpkg-deb --root "$root" --build "dist-packages/ccferry-${product}_${ver}_${debarch}.deb"
             fi
           }
           build cloud  linux-x64      amd64
@@ -110,7 +110,7 @@ jobs:
       - name: Build + tarballs + client pkgs
         run: |
           set -euxo pipefail
-          mkdir -p dist-packages build
+          mkdir -p dist-single dist-packages build
           ver=$(node -p "require('./packages/client/package.json').version")
           for platform in darwin-arm64 darwin-x64; do
             (cd packages/client && bun build --compile --target "bun-$platform" src/main.ts \
@@ -119,7 +119,7 @@ jobs:
             node scripts/package/fetch-sidecar.js "$platform" "$sidecar"
             root="build/ccferry-client-$platform-posix"
             rm -rf "$root" && bash scripts/package/stage.sh client "$platform" "$root" "$sidecar"
-            tar --owner=0 --group=0 --numeric-owner -czf \
+            tar --uid 0 --gid 0 -czf \
               "dist-packages/ccferry-client-${ver}-${platform}.tar.gz" -C "$root" .
             macroot="build/ccferry-client-$platform-mac"
             rm -rf "$macroot" && bash scripts/package/stage.sh client "$platform" "$macroot" --mac "$sidecar"
@@ -133,7 +133,7 @@ jobs:
                --outfile "../../dist-single/ccferry-cloud-$platform")
             root="build/ccferry-cloud-$platform"
             rm -rf "$root" && bash scripts/package/stage.sh cloud "$platform" "$root"
-            tar --owner=0 --group=0 --numeric-owner -czf \
+            tar --uid 0 --gid 0 -czf \
               "dist-packages/ccferry-cloud-${cver}-${platform}.tar.gz" -C "$root" .
           done
       - uses: actions/upload-artifact@v4
@@ -153,7 +153,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          mkdir -p dist-packages build
+          mkdir -p dist-single dist-packages build
           choco install innosetup --no-progress -y >/dev/null
           ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
           ver=$(node -p "require('./packages/client/package.json').version")
