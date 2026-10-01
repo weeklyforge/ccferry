@@ -185,5 +185,21 @@ void main() {
 
     model.close();
   });
+
+  testWidgets('sending shows the message immediately as a pending bubble', (tester) async {
+    final source = FakeSource([FakeSource.userLine('u1', 'hi')]);
+    final model = SessionStreamModel(connect: source.connectLive);
+
+    await tester.pumpWidget(harness(model));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, '续聊…'), 'instant-echo');
+    await tester.tap(find.text('发送'));
+    await tester.pump(); // one frame — no waiting for the daemon echo
+    expect(find.text('instant-echo'), findsOneWidget);
+
+    model.close();
+  });
 }
 

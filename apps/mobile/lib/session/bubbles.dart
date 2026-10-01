@@ -26,6 +26,10 @@ sealed class Bubble {
   final String? ts;
 }
 
+// Rendered text bubbles never carry more than this many characters; the
+// pending-send matcher must compare against the same cap.
+const bubbleTextCap = 2000;
+
 class TextBubble extends Bubble {
   const TextBubble({required this.role, required this.text, super.ts});
   final String role; // 'user' | 'assistant'
@@ -93,7 +97,7 @@ List<Bubble> parsedLineToBubbles(ParsedLine p) {
   final out = <Bubble>[];
   for (final block in contentBlocks(json)) {
     if (block is TextBlock && block.text.trim().isNotEmpty) {
-      out.add(TextBubble(role: type as String, text: block.text._head(2000), ts: ts));
+      out.add(TextBubble(role: type as String, text: block.text._head(bubbleTextCap), ts: ts));
     }
     if (block is ToolUseBlock) {
       out.add(ToolBubble(

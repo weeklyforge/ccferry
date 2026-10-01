@@ -135,4 +135,52 @@ void main() {
     model.toggle('t1');
     expect(model.expanded.contains('t1'), isFalse);
   });
+
+  test('beginSend holds a pending message until the matching user line arrives', () async {
+    final source = FakeSource([]);
+    final model = SessionStreamModel(connect: source.connectLive);
+    model.start(sessionId: 's1');
+    await settle();
+
+    model.beginSend('hello me');
+    expect(model.pendingSend, 'hello me');
+
+    source.emit(FakeSource.userLine('n1', 'hello me'));
+    await settle();
+    model.close();
+
+    expect(model.pendingSend, isNull);
+    // the real line rendered exactly once — no duplicate for the pending
+    expect(
+      model.bubbles.whereType<TextBubble>().where((b) => b.text == 'hello me').length,
+      1,
+    );
+  });
+
+  test('cancelPendingSend drops the pending message', () async {
+    final source = FakeSource([]);
+    final model = SessionStreamModel(connect: source.connectLive);
+    model.start(sessionId: 's1');
+    await settle();
+
+    model.beginSend('doomed');
+    model.cancelPendingSend();
+    model.close();
+
+    expect(model.pendingSend, isNull);
+  });
+
+  test('pending clears even when the echo arrives as a dedupe-replayed line', () async {
+    final source = FakeSource([FakeSource.userLine('n1', 'repeat me')]);
+    final model = SessionStreamModel(connect: source.connectLive);
+    model.start(sessionId: 's1');
+    await settle(); // 'repeat me' already seen by dedupe
+
+    model.beginSend('repeat me');
+    source.emit(FakeSource.userLine('n1', 'repeat me')); // replay after reconnect
+    await settle();
+    model.close();
+
+    expect(model.pendingSend, isNull);
+  });
 }

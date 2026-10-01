@@ -111,6 +111,9 @@ class _SessionPageState extends State<SessionPage> {
     // Mirror the pwa: cleared before the FIRST attempt, so a successful send
     // never leaves the text around for an accidental duplicate.
     _input.clear();
+    final model = context.read<SessionStreamModel>();
+    final failedBefore = sender.errors.length;
+    model.beginSend(text.trim()); // optimistic echo until the stream replays it
     setState(() {});
     await sender.send(
       text,
@@ -128,6 +131,10 @@ class _SessionPageState extends State<SessionPage> {
         return ok == true;
       },
     );
+    if (sender.errors.length > failedBefore) {
+      // the send failed — the session's own echo will never arrive
+      model.cancelPendingSend();
+    }
     if (sender.errors.isNotEmpty && mounted) {
       setState(() {}); // surface collected error lines below the composer
     }
@@ -146,7 +153,8 @@ class _SessionPageState extends State<SessionPage> {
   Widget build(BuildContext context) {
     final model = context.watch<SessionStreamModel>();
     final approvals = context.watch<ApprovalsModel>();
-    final bubbleCount = model.bubbles.length;
+    // The pending send renders as one extra bubble after the stream's own.
+    final bubbleCount = model.bubbles.length + (model.pendingSend == null ? 0 : 1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scroll.hasClients) return;
       final grew = bubbleCount - _seenBubbles;
@@ -175,9 +183,33 @@ class _SessionPageState extends State<SessionPage> {
                   controller: _scroll,
                   padding: const EdgeInsets.all(12),
                   itemCount:
-                      model.bubbles.length + visibleApprovals.length + (model.fullHistory ? 0 : 1),
+                      bubbleCount + visibleApprovals.length + (model.fullHistory ? 0 : 1),
                   itemBuilder: (context, i) {
-                    if (i == model.bubbles.length) {
+                    if (i < model.bubbles.length) {
+                      final bubble = model.bubbles[i];
+                      final id = bubble is ToolBubble ? bubble.toolUseId : null;
+                      final result = id == null ? null : model.toolResults[id];
+                      return BubbleView(
+                        bubble: bubble,
+                        hasResult: result != null,
+                        resultText: result?.text,
+                        resultError: result?.isError ?? false,
+                        expanded: id != null && model.expanded.contains(id),
+                        onToggleTool: id == null ? null : () => model.toggle(id),
+                        markdown: bubble is TextBubble && bubble.role == 'assistant',
+                      );
+                    }
+                    if (i == model.bubbles.length && model.pendingSend != null) {
+                      return BubbleView(
+                        bubble: TextBubble(role: 'user', text: model.pendingSend!),
+                        hasResult: false,
+                        resultText: null,
+                        resultError: false,
+                        expanded: false,
+                        onToggleTool: null,
+                      );
+                    }
+                    if (i == bubbleCount) {
                       return Column(
                         children: [
                           for (final request in visibleApprovals)
@@ -190,19 +222,7 @@ class _SessionPageState extends State<SessionPage> {
                         ],
                       );
                     }
-                    if (i > model.bubbles.length) return const SizedBox.shrink();
-                    final bubble = model.bubbles[i];
-                    final id = bubble is ToolBubble ? bubble.toolUseId : null;
-                    final result = id == null ? null : model.toolResults[id];
-                    return BubbleView(
-                      bubble: bubble,
-                      hasResult: result != null,
-                      resultText: result?.text,
-                      resultError: result?.isError ?? false,
-                      expanded: id != null && model.expanded.contains(id),
-                      onToggleTool: id == null ? null : () => model.toggle(id),
-                      markdown: bubble is TextBubble && bubble.role == 'assistant',
-                    );
+                    return const SizedBox.shrink();
                   },
                 ),
                 if (_newCount > 0)
