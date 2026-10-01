@@ -84,10 +84,10 @@ cd /d "<repo>\dist-single"
 ccferry-client.exe >> "%USERPROFILE%\.ccferry\logs\daemon.log" 2>&1
 ```
 
-**`%USERPROFILE%\.ccferry\start-daemon-hidden.vbs`**（隐藏控制台；登录任务是 Interactive 模式，不藏会有窗口）：
+**`%USERPROFILE%\.ccferry\start-daemon-hidden.vbs`**（隐藏控制台；登录任务是 Interactive 模式，不藏会有窗口）。第三参数 `True`（等待模式）是关键：wscript 陪着 daemon 存活，daemon 非零退出 → 任务判失败 → RestartOnFailure 生效；写成 `False` 的话 wscript 秒退、任务早"成功"，daemon 死了没人重启（2026-09-30 实测踩坑）：
 
 ```vbs
-CreateObject("WScript.Shell").Run """" & CreateObject("Scripting.FileSystemObject").BuildPath(CreateObject("WScript.Shell").ExpandEnvironmentStrings("%USERPROFILE%"), ".ccferry\start-daemon.cmd") & """", 0, False
+CreateObject("WScript.Shell").Run """" & CreateObject("Scripting.FileSystemObject").BuildPath(CreateObject("WScript.Shell").ExpandEnvironmentStrings("%USERPROFILE%"), ".ccferry\start-daemon.cmd") & """", 0, True
 ```
 
 **收紧 env 权限 + 注册 + 补丁**（默认 72h 执行时限会杀长驻进程，必须改 PT0S）：

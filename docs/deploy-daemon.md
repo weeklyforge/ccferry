@@ -85,10 +85,10 @@ cd /d "<repo>\dist-single"
 ccferry-client.exe >> "%USERPROFILE%\.ccferry\logs\daemon.log" 2>&1
 ```
 
-**`%USERPROFILE%\.ccferry\start-daemon-hidden.vbs`** (hides the console; logon tasks run Interactive, without this a window stays open):
+**`%USERPROFILE%\.ccferry\start-daemon-hidden.vbs`** (hides the console; logon tasks run Interactive, without this a window stays open). The `True` wait argument is load-bearing: wscript stays alive with the daemon, so a non-zero daemon exit marks the task failed and RestartOnFailure fires. With `False`, wscript exits at once, the task reports success long before the daemon dies, and nothing restarts it (verified the hard way 2026-09-30):
 
 ```vbs
-CreateObject("WScript.Shell").Run """" & CreateObject("Scripting.FileSystemObject").BuildPath(CreateObject("WScript.Shell").ExpandEnvironmentStrings("%USERPROFILE%"), ".ccferry\start-daemon.cmd") & """", 0, False
+CreateObject("WScript.Shell").Run """" & CreateObject("Scripting.FileSystemObject").BuildPath(CreateObject("WScript.Shell").ExpandEnvironmentStrings("%USERPROFILE%"), ".ccferry\start-daemon.cmd") & """", 0, True
 ```
 
 **Lock the env file, register, patch** (the default 72h execution time limit kills long-running daemons — PT0S is mandatory):
