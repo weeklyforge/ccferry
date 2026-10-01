@@ -70,6 +70,68 @@ describe('cloud app', () => {
     expect(res.status).toBe(502);
   });
 
+  // The SSE body never ends on its own — read until `pattern` lands and
+  // return the transcript so far; vitest's per-test timeout fails a missing
+  // pattern instead of the read hanging forever.
+  async function readUntil(reader: ReadableStreamDefaultReader<Uint8Array>, body: string, pattern: string): Promise<string> {
+    const decoder = new TextDecoder();
+    for (;;) {
+      if (body.includes(pattern)) return body;
+      const { done, value } = await reader.read();
+      if (done) return body;
+      body += decoder.decode(value ?? new Uint8Array());
+    }
+  }
+
+  it('tells new subscribers the current tunnel state when no peer ever connected', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/events/stream?token=pt`);
+    const reader = res.body!.getReader();
+    const body = await readUntil(reader, '', '"kind":"tunnel"');
+    await reader.cancel().catch(() => undefined);
+    expect(body).toContain('"state":"disconnected"');
+  });
+
+  it('pushes authoritative tunnel events as the peer comes and goes', async () => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/events/stream?token=pt`);
+    const reader = res.body!.getReader();
+    let body = await readUntil(reader, '', '"state":"disconnected"'); // synthetic current state — no peer yet
+
+    const pc = new WebSocket(`ws://127.0.0.1:${port}/tunnel`);
+    await new Promise((resolve) => pc.on('open', resolve));
+    pc.send(encodeFrame(FrameType.Auth, 0, Buffer.from('tt')));
+    await new Promise<void>((resolve) => pc.once('message', () => resolve()));
+    body = await readUntil(reader, body, '"state":"connected"'); // peer up — cloud-side event
+
+    pc.terminate(); // crash: the daemon never gets to send its own goodbye
+    body = await readUntil(reader, body, '"state":"disconnected"');
+    expect(body).toContain('"state":"connected"'); // the up event landed before the down
+    await reader.cancel().catch(() => undefined);
+    pc.close();
+  });
+
+  it('does not report the tunnel down when a second peer replaces the first', async () => {
+    const pc1 = new WebSocket(`ws://127.0.0.1:${port}/tunnel`);
+    await new Promise((resolve) => pc1.on('open', resolve));
+    pc1.send(encodeFrame(FrameType.Auth, 0, Buffer.from('tt')));
+    await new Promise<void>((resolve) => pc1.once('message', () => resolve()));
+
+    const res = await fetch(`http://127.0.0.1:${port}/api/events/stream?token=pt`);
+    const reader = res.body!.getReader();
+
+    const pc2 = new WebSocket(`ws://127.0.0.1:${port}/tunnel`);
+    pc2.on('open', () => pc2.send(encodeFrame(FrameType.Auth, 0, Buffer.from('tt'))));
+    await new Promise<number>((resolve) => pc1.on('close', (code) => resolve(code))); // pc1 kicked (4400)
+
+    let body = await readUntil(reader, '', '"state":"connected"'); // pc2 up via the cloud push
+    // Flush everything up to a deterministic marker before judging: a
+    // spurious drop from pc1's kicked socket would land by then.
+    pc2.send(encodeFrame(FrameType.Data, 0x8000_0000, Buffer.from(JSON.stringify({ kind: 'marker' }))));
+    body = await readUntil(reader, body, '"kind":"marker"');
+    await reader.cancel().catch(() => undefined);
+    expect(body).not.toContain('"state":"disconnected"');
+    pc2.close();
+  });
+
   it('exposes push routes and reports unconfigured without VAPID', async () => {
     const key = await fetch(`http://127.0.0.1:${port}/api/push/key?token=pt`);
     expect(key.status).toBe(503); // vapid null → push not configured

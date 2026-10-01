@@ -35,12 +35,19 @@ class MemoryStore implements SecureStore {
 // the events stream (fake_async flags pending reconnect timers otherwise).
 // events: 'open' (default) resolves a hanging 200 stream — the follower sees
 // a healthy connection; 'hang' never resolves the response — the follower
-// stays in its initial connecting state.
+// stays in its initial connecting state; 'tunnel-down' opens the stream and
+// delivers the cloud's authoritative tunnel-disconnected frame.
 ApiClient routedClient({required void Function(int) onLoad, String events = 'open'}) =>
     ApiClient(
       client: MockClient.streaming((req, _) async {
         if (req.url.path == '/api/events/stream') {
           if (events == 'hang') return Completer<http.StreamedResponse>().future;
+          if (events == 'tunnel-down') {
+            final controller = StreamController<List<int>>();
+            scheduleMicrotask(() =>
+                controller.add(utf8.encode('data: {"kind":"tunnel","state":"disconnected"}\n\n')));
+            return http.StreamedResponse(controller.stream, 200);
+          }
           return http.StreamedResponse(StreamController<List<int>>().stream, 200);
         }
         if (req.url.path == '/api/sessions') {
@@ -159,6 +166,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('已连接'), findsOneWidget);
+  });
+
+  testWidgets('shows the client-offline badge when the cloud reports the tunnel down', (tester) async {
+    final client = routedClient(onLoad: (_) {}, events: 'tunnel-down');
+    final approvals = ApprovalsModel(client: client);
+    final model = SessionsModel(client: client, approvals: approvals);
+
+    await tester.pumpWidget(harness(approvals: approvals, model: model, client: client));
+    await tester.pumpAndSettle();
+
+    expect(find.text('客户端离线'), findsOneWidget);
+    expect(find.text('已连接'), findsNothing);
   });
 
   testWidgets('stays on the connecting badge while the events stream hangs', (tester) async {

@@ -38,6 +38,17 @@ void main() {
     expect(p.raw, 'broken{');
   });
 
+  test('parseTunnelEvent reads connected and disconnected states', () {
+    expect(parseTunnelEvent('{"kind":"tunnel","state":"connected"}'), isTrue);
+    expect(parseTunnelEvent('{"kind":"tunnel","state":"disconnected"}'), isFalse);
+  });
+
+  test('parseTunnelEvent ignores other kinds, non-maps, and malformed json', () {
+    expect(parseTunnelEvent('{"kind":"approval","request":{}}'), isNull);
+    expect(parseTunnelEvent('[1,2]'), isNull);
+    expect(parseTunnelEvent('not json'), isNull);
+  });
+
   test('envelope with non-map json degrades to raw', () {
     final p = parseSessionLine('{"ok":true,"line":4,"json":[1,2]}', 1);
     expect(p.ok, isFalse);

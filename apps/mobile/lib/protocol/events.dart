@@ -40,6 +40,22 @@ ParsedLine parseSessionLine(String raw, int line) {
   return ParsedLine.bad(line, raw);
 }
 
+// Tunnel-state event the cloud pushes over the events stream (and the daemon
+// mirrors best-effort): {"kind":"tunnel","state":"connected"|"disconnected"}.
+// Returns true (up) / false (down), or null for other event kinds and
+// malformed payloads — callers must not crash on bad frames (spec R4).
+bool? parseTunnelEvent(String raw) {
+  try {
+    final value = jsonDecode(raw);
+    if (value is Map<String, dynamic> && value['kind'] == 'tunnel') {
+      return value['state'] == 'connected';
+    }
+  } catch (_) {
+    // malformed — not a tunnel event
+  }
+  return null;
+}
+
 sealed class ContentBlock {
   const ContentBlock();
 }

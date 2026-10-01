@@ -86,6 +86,12 @@ export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInsta
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
     }
     const unsubscribe = events.subscribe((event) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`));
+    // Authoritative current tunnel state, written last so it wins over any
+    // stale tunnel event replayed from the snapshot (a crashed daemon never
+    // sent its own goodbye). The block runs synchronously — no transition
+    // can interleave between reading the state and writing the frame.
+    const state = tunnel.connectedPeerCount() > 0 ? 'connected' : 'disconnected';
+    reply.raw.write(`data: ${JSON.stringify({ kind: 'tunnel', state, at: Date.now() })}\n\n`);
     const keepalive = setInterval(() => reply.raw.write(': keepalive\n\n'), KEEPALIVE_MS);
     req.raw.on('close', () => {
       if (clientId) sseClients.delete(clientId);
@@ -105,6 +111,16 @@ export async function buildCloudApp(opts: CloudAppOptions): Promise<FastifyInsta
       }
     }
   });
+
+  // Cloud-authoritative tunnel announcements, same shape the daemon sends
+  // best-effort on its own: the daemon cannot report its own crash, but the
+  // server's socket-close/watchdog view never misses it. The push sender
+  // ignores this kind (no notification), the PWA ignores unknown kinds.
+  const announceTunnel = (state: 'connected' | 'disconnected'): void => {
+    events.push({ kind: 'tunnel', state, at: Date.now() });
+  };
+  tunnel.onPeerUp(() => announceTunnel('connected'));
+  tunnel.onPeerDrop(() => announceTunnel('disconnected'));
 
   const here = path.dirname(fileURLToPath(import.meta.url));
   const defaultPwaDir = path.resolve(here, '../../pwa-dist');

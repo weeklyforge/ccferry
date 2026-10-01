@@ -30,6 +30,7 @@ function clientIp(direct: string, xff: string | string[] | undefined): string {
 export class TunnelServer {
   private peer: Peer | null = null;
   private readonly frameHandlers = new Set<(frame: Frame) => void>();
+  private readonly peerUpHandlers = new Set<() => void>();
   private readonly peerDropHandlers = new Set<() => void>();
   private readonly failures = new Map<string, { count: number; windowStart: number }>();
   private readonly bans = new Map<string, number>();
@@ -99,6 +100,12 @@ export class TunnelServer {
     this.frameHandlers.add(cb);
   }
 
+  // Fired when a peer becomes THE authenticated tunnel (AUTH_OK path): the
+  // app layer relays it to phones as the authoritative tunnel-up event.
+  onPeerUp(cb: () => void): void {
+    this.peerUpHandlers.add(cb);
+  }
+
   // Fired when THE authenticated peer goes away (drop, watchdog, kick): the
   // router must fail its in-flight streams now, not at the idle timeout.
   onPeerDrop(cb: () => void): void {
@@ -133,6 +140,7 @@ export class TunnelServer {
       peer.authenticated = true;
       this.peer = peer;
       peer.socket.send(encodeFrame(FrameType.AuthOk, 0, Buffer.alloc(0)));
+      for (const handler of this.peerUpHandlers) handler();
       return;
     }
     // Any authenticated inbound frame proves the peer is alive — defends a

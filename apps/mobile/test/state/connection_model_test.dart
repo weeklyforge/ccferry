@@ -22,6 +22,29 @@ void main() {
     expect(conn.state, 'reconnecting');
   });
 
+  test('tunnel events flip between online and clientOffline', () {
+    final conn = ConnectionModel();
+    conn.opened();
+    expect(conn.state, 'online');
+
+    conn.tunnelDown();
+    expect(conn.state, 'clientOffline');
+
+    conn.tunnelUp();
+    expect(conn.state, 'online');
+  });
+
+  test('a reconnect while the tunnel is known down reopens as clientOffline', () {
+    final conn = ConnectionModel();
+    conn.opened();
+    conn.tunnelDown();
+    conn.dropped();
+    expect(conn.state, 'reconnecting');
+
+    conn.opened(); // cloud reachable again, daemon still gone
+    expect(conn.state, 'clientOffline');
+  });
+
   test('state changes notify listeners', () {
     final conn = ConnectionModel();
     var notified = 0;

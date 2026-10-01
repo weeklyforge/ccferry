@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:ccferry_mobile/net/api_client.dart';
 import 'package:ccferry_mobile/net/follow.dart';
+import 'package:ccferry_mobile/protocol/events.dart';
 import 'package:ccferry_mobile/session/session_status.dart';
 import 'package:ccferry_mobile/state/approvals_model.dart';
 import 'package:ccferry_mobile/state/auth_model.dart';
@@ -59,7 +60,8 @@ class _SessionsPageState extends State<SessionsPage> {
 
   // The events stream does three jobs: instant list refresh on session events,
   // marking this clientId foreground on the cloud (suppresses duplicate native
-  // pushes), and — through the connection model — the connectivity badge.
+  // pushes), and — through the connection model — the connectivity badge:
+  // stream lifecycle plus the cloud's authoritative tunnel-state events.
   void _listenEvents() {
     final client = context.read<ApiClient>();
     final clientId = context.read<AuthModel>().clientId;
@@ -67,7 +69,11 @@ class _SessionsPageState extends State<SessionsPage> {
     final conn = context.read<ConnectionModel>();
     _eventsHandle = followSse(
       connect: () => client.sseGet('/api/events/stream?clientId=${Uri.encodeQueryComponent(clientId ?? '')}'),
-      onLine: (_) => model.refresh(),
+      onLine: (data) {
+        final tunnelUp = parseTunnelEvent(data);
+        if (tunnelUp != null) tunnelUp ? conn.tunnelUp() : conn.tunnelDown();
+        model.refresh();
+      },
       onReset: conn.dropped,
       onOpen: conn.opened,
       delay: (d) => Future<void>.delayed(d),
@@ -180,6 +186,7 @@ class _SessionsPageState extends State<SessionsPage> {
   Widget _connectionBadge(String state) {
     final (label, color) = switch (state) {
       'online' => ('已连接', const Color(0xFF07C160)),
+      'clientOffline' => ('客户端离线', Colors.orange),
       'reconnecting' => ('重连中', Colors.red),
       _ => ('连接中', Colors.orange),
     };

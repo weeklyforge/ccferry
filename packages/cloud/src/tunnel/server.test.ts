@@ -83,6 +83,22 @@ describe('TunnelServer AUTH (Review Focus 1)', () => {
     second.close();
   });
 
+  it('fires onPeerUp when a peer authenticates, never on a rejected auth', async () => {
+    const ups: number[] = [];
+    tunnel.onPeerUp(() => ups.push(Date.now()));
+    const bad = connect();
+    const badClosed = new Promise<number>((resolve) => bad.on('close', (code) => resolve(code)));
+    bad.on('open', () => bad.send(encodeFrame(FrameType.Auth, 0, Buffer.from('wrong'))));
+    await badClosed;
+    expect(ups).toHaveLength(0);
+    const ws = connect();
+    const ok = nextFrame(ws);
+    ws.on('open', () => ws.send(encodeFrame(FrameType.Auth, 0, Buffer.from('secret-token'))));
+    await ok;
+    expect(ups).toHaveLength(1);
+    ws.close();
+  });
+
   it('answers PING with PONG', async () => {
     const ws = connect();
     await new Promise((resolve) => ws.on('open', resolve));
