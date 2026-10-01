@@ -77,14 +77,18 @@ curl -s http://127.0.0.1:8787/api/projects -H "Authorization: Bearer <token>" | 
 
 Three files + one registration:
 
-**`%USERPROFILE%\.ccferry\start-daemon.cmd`** (load env → run exe → append log):
+**`%USERPROFILE%\.ccferry\start-daemon.cmd`** (load env → run exe → append log → **restart loop**). The loop, not the task's RestartOnFailure policy, is the crash supervisor: that policy carries a fixed restart budget which setup-era failures had long consumed when the daemon died silently on 2026-10-01 and nothing restarted it — a long-running process that never exits 0 never earns the budget back. Each exit is logged with its code, so the next crash leaves a forensic trail:
 
 ```bat
 @echo off
 for /f "usebackq tokens=1,* delims==" %%A in ("%USERPROFILE%\.ccferry\daemon.env") do set "%%A=%%B"
 if not exist "%USERPROFILE%\.ccferry\logs" mkdir "%USERPROFILE%\.ccferry\logs"
 cd /d "<repo>\dist-single"
+:loop
 ccferry-client.exe >> "%USERPROFILE%\.ccferry\logs\daemon.log" 2>&1
+echo %date% %time% ccferry-client.exe exited with code %errorlevel%, restarting in 5s >> "%USERPROFILE%\.ccferry\logs\daemon.log"
+ping -n 6 127.0.0.1 >nul
+goto loop
 ```
 
 **`%USERPROFILE%\.ccferry\start-daemon-hidden.vbs`** (hides the console; logon tasks run Interactive, without this a window stays open). The `True` wait argument is load-bearing: wscript stays alive with the daemon, so a non-zero daemon exit marks the task failed and RestartOnFailure fires. With `False`, wscript exits at once, the task reports success long before the daemon dies, and nothing restarts it (verified the hard way 2026-09-30):
@@ -114,7 +118,16 @@ $folder.RegisterTaskDefinition('ccferry-daemon', $def, 6, $null, $null, $null)
 
 > Note: on the reference machine `Register-ScheduledTask` (CIM) failed with "Unspecified error / RPC failed"; the `schtasks` + COM patch path works. If CIM works on yours, `Register-ScheduledTask -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1))` does it in one step.
 
-Manage: `schtasks /run|/end|/query /tn ccferry-daemon`.
+Manage: `schtasks /run|/query /tn ccferry-daemon` to start/status. **Stop takes two steps** (verified 2026-10-01: `/end` alone kills only wscript and orphans the exe; and a user-stop never triggers RestartOnFailure, so this stays down):
+
+```powershell
+schtasks /end /tn ccferry-daemon
+Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" |
+  Where-Object { $_.CommandLine -like '*start-daemon*' } |
+  ForEach-Object { & taskkill /PID $_.ProcessId /T /F }
+```
+
+Killing just the exe does NOT stop the daemon — the supervisor loop resurrects it within 5s (that is the feature).
 
 ### 5.2 Linux — systemd user unit (untested)
 
@@ -207,7 +220,7 @@ systemctl daemon-reload && systemctl restart ccferry-cloud
 
 ## 7. Ops notes
 
-- **Rebuild**: the exe is file-locked while running — stop first (Windows `schtasks /end`, Linux `systemctl --user stop`, macOS `launchctl unload`; cloud `systemctl restart` after scp), then `build-single.sh`, then start
+- **Rebuild**: the exe is file-locked while running — stop first (Windows: the two-step stop in §5.1, Linux `systemctl --user stop`, macOS `launchctl unload`; cloud `systemctl restart` after scp), then `build-single.sh`, then start
 - **Logs**: the Windows manual path appends to `daemon.log` with no rotation — check its size occasionally; Linux systemd goes through journald
 - **Token rotation**: edit `daemon.env` (+ the phone app settings), restart the daemon
 - **Cloud-side history**: `docs/notes/m3-findings.md` (original node deployment) and the 2026-09-30 update (single-package swap)

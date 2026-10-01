@@ -76,14 +76,18 @@ curl -s http://127.0.0.1:8787/api/projects -H "Authorization: Bearer <token>" | 
 
 三个文件 + 一条注册命令：
 
-**`%USERPROFILE%\.ccferry\start-daemon.cmd`**（读 env → 起 exe → 追加日志）：
+**`%USERPROFILE%\.ccferry\start-daemon.cmd`**（读 env → 起 exe → 追加日志 → **重启循环**）。崩溃监督靠循环而不是任务的 RestartOnFailure 策略：该策略重启次数是固定配额，2026-10-01 daemon 静默死亡时配额早被装机期的失败耗尽且永不复位（长驻进程从不以 0 退出，配额挣不回来）。每次退出都会带退出码记录在案，下次崩溃留下尸检线索：
 
 ```bat
 @echo off
 for /f "usebackq tokens=1,* delims==" %%A in ("%USERPROFILE%\.ccferry\daemon.env") do set "%%A=%%B"
 if not exist "%USERPROFILE%\.ccferry\logs" mkdir "%USERPROFILE%\.ccferry\logs"
 cd /d "<repo>\dist-single"
+:loop
 ccferry-client.exe >> "%USERPROFILE%\.ccferry\logs\daemon.log" 2>&1
+echo %date% %time% ccferry-client.exe exited with code %errorlevel%, restarting in 5s >> "%USERPROFILE%\.ccferry\logs\daemon.log"
+ping -n 6 127.0.0.1 >nul
+goto loop
 ```
 
 **`%USERPROFILE%\.ccferry\start-daemon-hidden.vbs`**（隐藏控制台；登录任务是 Interactive 模式，不藏会有窗口）。第三参数 `True`（等待模式）是关键：wscript 陪着 daemon 存活，daemon 非零退出 → 任务判失败 → RestartOnFailure 生效；写成 `False` 的话 wscript 秒退、任务早"成功"，daemon 死了没人重启（2026-09-30 实测踩坑）：
@@ -113,7 +117,16 @@ $folder.RegisterTaskDefinition('ccferry-daemon', $def, 6, $null, $null, $null)
 
 > 注：本机实测 `Register-ScheduledTask`（CIM 层）报 "Unspecified error / RPC failed"，`schtasks` + COM 补丁路径可用；若你的机器 CIM 正常，`Register-ScheduledTask -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1))` 一步到位。
 
-管理：`schtasks /run|/end|/query /tn ccferry-daemon`。
+管理：`schtasks /run|/query /tn ccferry-daemon` 启动/查询。**停止需要两步**（2026-10-01 实测：单用 `/end` 只杀 wscript，exe 成孤儿；且用户主动停止不会触发 RestartOnFailure，所以停得住）：
+
+```powershell
+schtasks /end /tn ccferry-daemon
+Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" |
+  Where-Object { $_.CommandLine -like '*start-daemon*' } |
+  ForEach-Object { & taskkill /PID $_.ProcessId /T /F }
+```
+
+只杀 exe 不算停止——监督循环 5 秒内就会把它拉回来（这正是本设计的目的）。
 
 ### 5.2 Linux —— systemd 用户服务（未实测）
 
@@ -206,7 +219,7 @@ systemctl daemon-reload && systemctl restart ccferry-cloud
 
 ## 7. 运维备忘
 
-- **重建**：exe 运行中文件被锁——先停（Windows `schtasks /end`，Linux `systemctl --user stop`，macOS `launchctl unload`；云端 scp 后 `systemctl restart`）→ `build-single.sh` → 再启
+- **重建**：exe 运行中文件被锁——先停（Windows 用 §5.1 的两步停止，Linux `systemctl --user stop`，macOS `launchctl unload`；云端 scp 后 `systemctl restart`）→ `build-single.sh` → 再启
 - **日志**：Windows 手动路径下 `daemon.log` 只追加不轮转，定期检查大小；Linux systemd 走 journal 自动轮转
 - **换 token**：改 `daemon.env` + 手机 app 设置页同步更新，重启 daemon 生效
 - **云端历史**：`docs/notes/m3-findings.md`（node 形态原始部署）与 2026-09-30 单包切换记录
