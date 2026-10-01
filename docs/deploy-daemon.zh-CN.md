@@ -163,7 +163,27 @@ loginctl enable-linger $USER   # 不登录也常驻（需管理员或 polkit 授
 
 `~/.ccferry/start-daemon.sh`：`set -a; . "$HOME/.ccferry/daemon.env"; set +a; cd "<repo>/dist-single" && exec ./ccferry-client`（`chmod +x`）。加载：`launchctl load ~/Library/LaunchAgents/com.ccferry.daemon.plist`。
 
-## 6. 云端服务器部署（2026-09-30 实测）
+## 6. 云端服务器部署（deb 路径 2026-10-01 实测）
+
+首选：release 里的 deb（任意 `v<x.y.z>-pc.N` 版本都有）。包含 `/usr/bin/ccferry-cloud` 与读 `/etc/ccferry/cloud.env` 的 systemd unit；postinst 绝不覆盖已有的 env 文件，然后 daemon-reload + enable + 重启服务：
+
+```bash
+# 开发机：从 release 下载并上传
+curl -fL -o ccferry-cloud_<ver>_amd64.deb \
+  https://github.com/weeklyforge/ccferry/releases/download/v<ver>-pc.N/ccferry-cloud_<ver>_amd64.deb
+scp ccferry-cloud_<ver>_amd64.deb root@<server>:/tmp/
+
+# 服务器
+dpkg -i /tmp/ccferry-cloud_<ver>_amd64.deb
+```
+
+首次部署（参考服务器已完成）：准备 `/etc/ccferry/cloud.env`，含 `CLOUD_TOKEN_PHONE`、`CCFERRY_TUNNEL_TOKEN`，可选 `CLOUD_PORT`、`CLOUD_PWA_DIR`、`VAPID_*`、`CCFERRY_PUSH_SUBS`——见包内 `cloud.env.template`。
+
+- **验证**：`systemctl is-active ccferry-cloud`（FragmentPath 应为 `/usr/lib/systemd/system/ccferry-cloud.service`、状态 `enabled`）；过 Caddy —— PWA 壳 `200`、无 token `/api` `401`、带 token `200`；SSE 流最初几帧带 `{"kind":"tunnel","state":...}`（当前状态 + 实时事件）；PC daemon 日志出现新的 `tunnel authenticated`（重启会切断隧道，daemon 自动重连）
+- **回滚**：`dpkg -i ccferry-cloud_<旧版>_amd64.deb`（或保留下方 deb 之前的手工布局）
+- 服务器要求实测：Linux x86_64、glibc 2.39 可用；Caddy 反代 127.0.0.1:8788
+
+### 手工回退路径（deb 之前的布局，2026-09-30 实测）
 
 云端二进制无伴生文件（纯 fastify/websocket/static）。开发机交叉编译，替换 systemd unit：
 
@@ -182,9 +202,7 @@ systemctl daemon-reload && systemctl restart ccferry-cloud
 ```
 
 - unit 内联的 Environment（token、`CLOUD_PWA_DIR`、VAPID 密钥、订阅文件路径——均为绝对路径）原样保留，PWA dist 与推送订阅文件不动，只换运行时
-- **切换后验证**：`systemctl is-active ccferry-cloud`；过 Caddy —— PWA 壳 `200`、无 token `/api` `401`、带 token `200`；PC daemon 日志出现新的 `tunnel authenticated`（重启会切断隧道，daemon 自动重连）
 - **回滚**：`cp .../ccferry-cloud.service.bak-node .../ccferry-cloud.service && systemctl daemon-reload && systemctl restart ccferry-cloud`
-- 服务器要求实测：Linux x86_64、glibc 2.39 可用；Caddy 反代 127.0.0.1:8788
 
 ## 7. 运维备忘
 

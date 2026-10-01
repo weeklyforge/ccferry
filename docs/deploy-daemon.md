@@ -164,7 +164,27 @@ Bonus: stdout goes to the journal (`journalctl --user -u ccferry -f`), log rotat
 
 `~/.ccferry/start-daemon.sh`: `set -a; . "$HOME/.ccferry/daemon.env"; set +a; cd "<repo>/dist-single" && exec ./ccferry-client` (make executable). Load: `launchctl load ~/Library/LaunchAgents/com.ccferry.daemon.plist`.
 
-## 6. Cloud server deployment (verified 2026-09-30)
+## 6. Cloud server deployment (deb path verified 2026-10-01)
+
+Preferred path: the release deb (from any `v<x.y.z>-pc.N` release). It ships `/usr/bin/ccferry-cloud` plus a systemd unit that reads `/etc/ccferry/cloud.env`; the postinst never overwrites an existing env file, then daemon-reloads, enables, and restarts the service:
+
+```bash
+# dev box: download from the release, upload
+curl -fL -o ccferry-cloud_<ver>_amd64.deb \
+  https://github.com/weeklyforge/ccferry/releases/download/v<ver>-pc.N/ccferry-cloud_<ver>_amd64.deb
+scp ccferry-cloud_<ver>_amd64.deb root@<server>:/tmp/
+
+# server
+dpkg -i /tmp/ccferry-cloud_<ver>_amd64.deb
+```
+
+First-time setup (already done on the reference server): `/etc/ccferry/cloud.env` with `CLOUD_TOKEN_PHONE`, `CCFERRY_TUNNEL_TOKEN`, and optionally `CLOUD_PORT`, `CLOUD_PWA_DIR`, `VAPID_*`, `CCFERRY_PUSH_SUBS` — see the shipped `cloud.env.template`.
+
+- **Verify**: `systemctl is-active ccferry-cloud` (FragmentPath should be `/usr/lib/systemd/system/ccferry-cloud.service`, state `enabled`); through Caddy — PWA shell `200`, `/api/...` without token `401`, with token `200`; the SSE stream's first frames carry `{"kind":"tunnel","state":...}` (current state, then live events); the PC daemon log shows a fresh `tunnel authenticated` (the restart severs the tunnel; the daemon reconnects on its own)
+- **Rollback**: `dpkg -i ccferry-cloud_<prev>_amd64.deb` (or keep the pre-deb manual layout below)
+- Server requirements observed: Linux x86_64, glibc ≥ 2.39 works; Caddy fronts 127.0.0.1:8788
+
+### Manual fallback (pre-deb layout, verified 2026-09-30)
 
 The cloud binary needs no sidecar (fastify/websocket/static only). Cross-compile on the dev box and swap the systemd unit:
 
@@ -183,9 +203,7 @@ systemctl daemon-reload && systemctl restart ccferry-cloud
 ```
 
 - The unit keeps its inline Environment values (tokens, `CLOUD_PWA_DIR`, VAPID keys, subscription paths — all absolute), so the PWA dist and push-subscription files stay where they were; only the runtime swaps
-- **Verify after the swap**: `systemctl is-active ccferry-cloud`; through Caddy — PWA shell `200`, `/api/...` without token `401`, with token `200`; the PC daemon log shows a fresh `tunnel authenticated` (the restart severs the tunnel; the daemon reconnects on its own)
 - **Rollback**: `cp .../ccferry-cloud.service.bak-node .../ccferry-cloud.service && systemctl daemon-reload && systemctl restart ccferry-cloud`
-- Server requirements observed: Linux x86_64, glibc ≥ 2.39 works; Caddy fronts 127.0.0.1:8788
 
 ## 7. Ops notes
 
