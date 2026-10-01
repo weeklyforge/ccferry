@@ -1,4 +1,4 @@
-package com.fetaoily.ccferry
+package com.weeklyforge.ccferry
 
 import android.content.Intent
 import android.net.Uri

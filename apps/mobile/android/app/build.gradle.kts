@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -16,7 +18,7 @@ if (googleServicesFile.exists()) {
 // repo secrets), sign with that keystore; otherwise fall back to the debug
 // key so local `flutter run --release` keeps working. Same key material on
 // both paths keeps in-place self-updates possible across CI and local builds.
-val keystoreProperties = java.util.Properties()
+val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
 val hasReleaseKeystore = keystorePropertiesFile.exists()
 if (hasReleaseKeystore) {
@@ -24,7 +26,7 @@ if (hasReleaseKeystore) {
 }
 
 android {
-    namespace = "com.fetaoily.ccferry"
+    namespace = "com.weeklyforge.ccferry"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -35,7 +37,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.fetaoily.ccferry"
+        applicationId = "com.weeklyforge.ccferry"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
