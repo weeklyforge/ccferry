@@ -4,6 +4,8 @@
 
 Single-package deployment (spec D5': one process, one artifact, one command) and per-OS autostart configuration.
 
+> Ready-made packages for every platform ship on [GitHub Releases](https://github.com/weeklyforge/ccferry/releases): `v<x.y.z>-pc.N` tags carry the deb / rpm / pacman / mac pkg / windows setup.exe / zip matrix, plain `v<x.y.z>` tags are the Android channel (APK + self-update metadata, holding the `latest` alias).
+
 - Production form = the `dist-single/` folder: `ccferry-client(.exe)` (Bun-compiled, all JS embedded) plus the sibling `claude(.exe)` (~245MB — the agent SDK's native CLI, which `bun --compile` cannot embed; the driver looks for it beside its own exe at runtime and passes it explicitly)
 - Dev form (`pnpm --filter @ccferry/client start`, node+tsx) is for development only; not covered here
 - Verification markers: **PC daemon on Windows — verified 2026-09-30; cloud on Linux x64 — verified 2026-09-30**; the Linux / macOS *client* autostart sections are **untested** — verify on first use and update this doc

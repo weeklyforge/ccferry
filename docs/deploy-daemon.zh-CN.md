@@ -4,6 +4,8 @@
 
 单包形态（spec D5' 拍板：一进程、一制品、一条命令）部署与各操作系统自启配置。
 
+> 各平台成品安装包发布在 [GitHub Releases](https://github.com/weeklyforge/ccferry/releases)：`v<x.y.z>-pc.N` tag = deb / rpm / pacman / mac pkg / windows setup.exe / zip 全矩阵；纯 `v<x.y.z>` tag = Android 通道（APK + 自更新元数据，持有 `latest` 别名）。
+
 - 生产形态 = `dist-single/` 目录：`ccferry-client(.exe)`（Bun 编译，全部 JS 内嵌）+ 伴生 `claude(.exe)`（agent SDK 原生 CLI，~245MB，`bun --compile` 无法内嵌，驱动会在运行时于自身 exe 旁寻找并显式传给 SDK）
 - dev 形态（`pnpm --filter @ccferry/client start`，node+tsx）仅用于开发调试，本文不覆盖
 - 实测标注：**PC daemon（Windows）= 2026-09-30 实测通过；云端（Linux x64）= 2026-09-30 实测通过**；Linux / macOS 的**客户端**自启配置**未实测**，首次使用请验证并回填本文
