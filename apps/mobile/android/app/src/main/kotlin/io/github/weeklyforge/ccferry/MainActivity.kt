@@ -1,4 +1,4 @@
-package com.weeklyforge.ccferry
+package io.github.weeklyforge.ccferry
 
 import android.content.Intent
 import android.net.Uri
