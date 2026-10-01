@@ -1,4 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { DriverEvent, ParsedLine, ProjectSummary, SessionSummary } from '@ccferry/protocol';
@@ -106,8 +107,26 @@ export class SdkDriver implements SessionDriver {
 
   async *sendMessage(input: SendMessageInput): AsyncGenerator<DriverEvent> {
     this.currentSessionId = input.sessionId;
+    // Streaming input mode is load-bearing: control requests — canUseTool's
+    // can_use_tool among them — are "only supported when streaming
+    // input/output is used" (SDK types). A bare string prompt runs
+    // writeAfterInitialize one-shot mode, and every permission ask then dies
+    // instantly with "AbortError: Stream closed" (10/10 failures in the
+    // 2026-10-01 手机续聊 incident). The generator deliberately never
+    // completes: an open input channel keeps the control requests answerable
+    // for the whole turn, and teardown happens when the driver breaks out of
+    // the message loop after the result message (Query.return cleans up the
+    // CLI subprocess).
+    async function* promptStream(): AsyncGenerator<SDKUserMessage> {
+      yield {
+        type: 'user',
+        message: { role: 'user', content: input.text },
+        parent_tool_use_id: null,
+      };
+      await new Promise<void>(() => undefined);
+    }
     for await (const message of query({
-      prompt: input.text,
+      prompt: promptStream(),
       options: {
         resume: input.sessionId ?? undefined,
         cwd: input.projectPath,
@@ -119,6 +138,7 @@ export class SdkDriver implements SessionDriver {
       if (msg.session_id) this.currentSessionId = msg.session_id;
       const [event] = mapSdkMessages([msg]);
       if (event) yield event;
+      if (msg.type === 'result') break; // turn complete — tear down the CLI
     }
   }
 

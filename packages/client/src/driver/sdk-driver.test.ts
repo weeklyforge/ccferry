@@ -2,10 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 
 // Captures the options the driver hands to the SDK query layer; hoisted so
 // the module mock below can close over it.
-const queryCalls: { options?: { pathToClaudeCodeExecutable?: string } }[] = vi.hoisted(() => []);
+const queryCalls: {
+  prompt?: unknown;
+  options?: { pathToClaudeCodeExecutable?: string };
+}[] = vi.hoisted(() => []);
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: async function* (q: { options?: { pathToClaudeCodeExecutable?: string } }) {
     queryCalls.push(q);
+    // Streaming input mode behaves like a live CLI: messages flow, and after
+    // the result message the process stays alive waiting for more input. A
+    // driver that never breaks out of the message loop hangs here forever.
+    yield { type: 'system', subtype: 'init' };
+    yield { type: 'result', subtype: 'success', result: 'done', session_id: 'sid-1' };
+    await new Promise(() => undefined);
   },
 }));
 
@@ -26,6 +35,38 @@ describe('SdkDriver.sendMessage', () => {
       { type: 'assistant', text: 'hello world' },
       { type: 'result', subtype: 'success', text: 'done', sessionId: 'sid-1' },
     ]);
+  });
+
+  it('sends the prompt as a streaming input stream, not a bare string', async () => {
+    const driver = new SdkDriver('/nonexistent', {
+      execPath: 'C:\\node\\node.exe',
+      exists: () => false,
+    });
+    for await (const _ of driver.sendMessage({ sessionId: null, projectPath: 'C:\\p', text: 'hi' })) {
+      void _;
+    }
+    const prompt = queryCalls.at(-1)?.prompt;
+    expect(prompt).not.toBeNull();
+    expect(typeof prompt).toBe('object');
+    const stream = prompt as AsyncIterable<unknown>;
+    expect(typeof (stream as unknown as { next: unknown }).next).toBe('function');
+    // the first streamed message carries the prompt text
+    for await (const msg of stream) {
+      expect(JSON.stringify(msg)).toContain('hi');
+      break; // the stream never completes by design — pull one message
+    }
+  });
+
+  it('returns after the result message even though the CLI stream stays open', async () => {
+    const driver = new SdkDriver('/nonexistent', {
+      execPath: 'C:\\node\\node.exe',
+      exists: () => false,
+    });
+    const events = [];
+    for await (const event of driver.sendMessage({ sessionId: null, projectPath: 'C:\\p', text: 'hi' })) {
+      events.push(event);
+    }
+    expect(events.at(-1)).toEqual({ type: 'result', subtype: 'success', text: 'done', sessionId: 'sid-1' });
   });
 });
 
