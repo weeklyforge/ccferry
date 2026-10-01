@@ -28,9 +28,19 @@ class _SessionPageState extends State<SessionPage> {
   SessionSender? _sender;
   FollowHandle? _approvalsHandle;
 
+  // Follow-scroll state: "at the bottom" means within this many pixels of the
+  // end. New rows arriving while the reader is away from the bottom count up
+  // in _newCount (pill) instead of yanking the view to the end; reaching the
+  // bottom again — by tap or by scrolling — clears the count.
+  static const double _bottomThreshold = 64;
+  bool _atBottom = true; // an empty list is trivially at the bottom
+  int _newCount = 0;
+  int _seenBubbles = 0;
+
   @override
   void initState() {
     super.initState();
+    _scroll.addListener(_onScroll);
     // start() notifies listeners — defer it out of the build phase.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -43,6 +53,30 @@ class _SessionPageState extends State<SessionPage> {
         );
       });
     });
+  }
+
+  void _onScroll() {
+    if (!_scroll.hasClients) return;
+    if (_scroll.position.pixels >=
+        _scroll.position.maxScrollExtent - _bottomThreshold) {
+      _atBottom = true;
+      if (_newCount > 0) {
+        setState(() {
+          _newCount = 0; // the reader caught up on their own
+        });
+      }
+    } else {
+      _atBottom = false;
+    }
+  }
+
+  void _jumpToBottom() {
+    if (!_scroll.hasClients) return;
+    _scroll.animateTo(
+      _scroll.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+    );
   }
 
   // Live approvals: request frames ingest, settled frames drop the card.
@@ -101,6 +135,7 @@ class _SessionPageState extends State<SessionPage> {
 
   @override
   void dispose() {
+    _scroll.removeListener(_onScroll);
     _scroll.dispose();
     _input.dispose();
     _approvalsHandle?.close();
@@ -111,9 +146,17 @@ class _SessionPageState extends State<SessionPage> {
   Widget build(BuildContext context) {
     final model = context.watch<SessionStreamModel>();
     final approvals = context.watch<ApprovalsModel>();
+    final bubbleCount = model.bubbles.length;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scroll.hasClients) {
+      if (!_scroll.hasClients) return;
+      final grew = bubbleCount - _seenBubbles;
+      _seenBubbles = bubbleCount;
+      if (_atBottom) {
         _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      } else if (grew > 0) {
+        setState(() {
+          _newCount += grew;
+        });
       }
     });
 
@@ -126,39 +169,56 @@ class _SessionPageState extends State<SessionPage> {
       body: Column(
         children: [
           Expanded(
-            child: ListView.builder(
-              controller: _scroll,
-              padding: const EdgeInsets.all(12),
-              itemCount:
-                  model.bubbles.length + visibleApprovals.length + (model.fullHistory ? 0 : 1),
-              itemBuilder: (context, i) {
-                if (i == model.bubbles.length) {
-                  return Column(
-                    children: [
-                      for (final request in visibleApprovals)
-                        ApprovalCard(request: request),
-                      if (!model.fullHistory)
-                        TextButton(
-                          onPressed: model.loadFullHistory,
-                          child: const Text('加载全部历史'),
-                        ),
-                    ],
-                  );
-                }
-                if (i > model.bubbles.length) return const SizedBox.shrink();
-                final bubble = model.bubbles[i];
-                final id = bubble is ToolBubble ? bubble.toolUseId : null;
-                final result = id == null ? null : model.toolResults[id];
-                return BubbleView(
-                  bubble: bubble,
-                  hasResult: result != null,
-                  resultText: result?.text,
-                  resultError: result?.isError ?? false,
-                  expanded: id != null && model.expanded.contains(id),
-                  onToggleTool: id == null ? null : () => model.toggle(id),
-                  markdown: bubble is TextBubble && bubble.role == 'assistant',
-                );
-              },
+            child: Stack(
+              children: [
+                ListView.builder(
+                  controller: _scroll,
+                  padding: const EdgeInsets.all(12),
+                  itemCount:
+                      model.bubbles.length + visibleApprovals.length + (model.fullHistory ? 0 : 1),
+                  itemBuilder: (context, i) {
+                    if (i == model.bubbles.length) {
+                      return Column(
+                        children: [
+                          for (final request in visibleApprovals)
+                            ApprovalCard(request: request),
+                          if (!model.fullHistory)
+                            TextButton(
+                              onPressed: model.loadFullHistory,
+                              child: const Text('加载全部历史'),
+                            ),
+                        ],
+                      );
+                    }
+                    if (i > model.bubbles.length) return const SizedBox.shrink();
+                    final bubble = model.bubbles[i];
+                    final id = bubble is ToolBubble ? bubble.toolUseId : null;
+                    final result = id == null ? null : model.toolResults[id];
+                    return BubbleView(
+                      bubble: bubble,
+                      hasResult: result != null,
+                      resultText: result?.text,
+                      resultError: result?.isError ?? false,
+                      expanded: id != null && model.expanded.contains(id),
+                      onToggleTool: id == null ? null : () => model.toggle(id),
+                      markdown: bubble is TextBubble && bubble.role == 'assistant',
+                    );
+                  },
+                ),
+                if (_newCount > 0)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 8,
+                    child: Center(
+                      child: FilledButton.tonalIcon(
+                        onPressed: _jumpToBottom,
+                        icon: const Icon(Icons.arrow_downward, size: 16),
+                        label: Text('$_newCount 条新消息'),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           if (_sender != null && _sender!.errors.isNotEmpty)

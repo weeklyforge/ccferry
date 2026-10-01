@@ -33,6 +33,22 @@ class FakeSource {
     return controller.stream;
   }
 
+  /// Live mode for interaction tests: unlike connectOpen, the controller
+  /// stays reachable so the test can emit lines AFTER the initial batch
+  /// (a message arriving while the user is scrolled up).
+  StreamController<String>? live;
+
+  Future<Stream<String>> connectLive(String path) async {
+    paths.add(path);
+    live = StreamController<String>();
+    for (final l in lines) {
+      live!.add('data: $l\n\n');
+    }
+    return live!.stream;
+  }
+
+  void emit(String line) => live?.add('data: $line\n\n');
+
   static String userLine(String uuid, String text) =>
       jsonEncode({'uuid': uuid, 'type': 'user', 'message': {'content': text}});
 

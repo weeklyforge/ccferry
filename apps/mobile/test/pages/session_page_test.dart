@@ -115,5 +115,75 @@ void main() {
 
     model.close();
   });
+
+  // ListView.builder builds only visible rows, so a finder locating a text
+  // IS the visibility oracle: off-viewport rows are not in the tree.
+  List<String> historyLines(int n) => [
+        for (var i = 0; i < n; i++)
+          FakeSource.userLine('u$i', 'msg-$i'),
+      ];
+
+  testWidgets('new messages while scrolled up do not yank; pill counts them', (tester) async {
+    final source = FakeSource(historyLines(30));
+    final model = SessionStreamModel(connect: source.connectLive);
+
+    await tester.pumpWidget(harness(model));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle(); // the pin-to-bottom jump renders one frame later
+    expect(find.text('msg-29'), findsOneWidget); // initial load pins to bottom
+
+    await tester.drag(find.byType(ListView), const Offset(0, 300));
+    await tester.pumpAndSettle();
+    expect(find.text('msg-29'), findsNothing); // scrolled up into history
+
+    source.emit(FakeSource.userLine('n1', 'late-1'));
+    source.emit(FakeSource.userLine('n2', 'late-2'));
+    source.emit(FakeSource.userLine('n3', 'late-3'));
+    await tester.pumpAndSettle();
+    expect(find.text('late-3'), findsNothing); // still reading history
+    expect(find.text('3 条新消息'), findsOneWidget);
+
+    model.close();
+  });
+
+  testWidgets('tapping the pill jumps to bottom and clears the count', (tester) async {
+    final source = FakeSource(historyLines(30));
+    final model = SessionStreamModel(connect: source.connectLive);
+
+    await tester.pumpWidget(harness(model));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    await tester.drag(find.byType(ListView), const Offset(0, 300));
+    await tester.pumpAndSettle();
+
+    source.emit(FakeSource.userLine('n1', 'late-1'));
+    source.emit(FakeSource.userLine('n2', 'late-2'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 条新消息'), findsOneWidget);
+
+    await tester.tap(find.text('2 条新消息'));
+    await tester.pumpAndSettle();
+    expect(find.text('late-2'), findsOneWidget); // caught up
+    expect(find.textContaining('条新消息'), findsNothing);
+
+    model.close();
+  });
+
+  testWidgets('new message while at the bottom auto-aligns without a pill', (tester) async {
+    final source = FakeSource(historyLines(30));
+    final model = SessionStreamModel(connect: source.connectLive);
+
+    await tester.pumpWidget(harness(model));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle(); // the pin-to-bottom jump renders one frame later
+    expect(find.text('msg-29'), findsOneWidget);
+
+    source.emit(FakeSource.userLine('n1', 'fresh-1'));
+    await tester.pumpAndSettle();
+    expect(find.text('fresh-1'), findsOneWidget); // followed down
+    expect(find.textContaining('条新消息'), findsNothing);
+
+    model.close();
+  });
 }
 
