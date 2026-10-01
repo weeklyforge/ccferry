@@ -6,7 +6,7 @@ name: packages
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    tags: ['v*-pc.*']
 
 permissions:
   contents: write
@@ -208,3 +208,4 @@ jobs:
         with:
           files: dist-packages/**
           fail_on_unmatched_files: true
+          make_latest: 'false'

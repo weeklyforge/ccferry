@@ -1,0 +1,65 @@
+name: android
+
+# Android release channel: builds the signed APK plus self-update metadata
+# (latest.json) and attaches them to the tag's release, pinning the
+# `releases/latest` alias (the app's updater reads it — PC releases never may).
+# Triggered by plain semver tags only; the -pc.* tags belong to packages.yml.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    if: ${{ !contains(github.ref, '-pc') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Decode signing material
+        run: |
+          set -euxo pipefail
+          base64 -d > "$RUNNER_TEMP/keystore.jks" <<< "$ANDROID_KEYSTORE_BASE64"
+          cat > apps/mobile/android/key.properties <<EOF
+          storeFile=$RUNNER_TEMP/keystore.jks
+          storePassword=$ANDROID_STORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Build APK
+        run: |
+          set -euxo pipefail
+          cd apps/mobile
+          flutter pub get
+          flutter build apk --release
+      - name: Publish release assets (apk + latest.json, pinned latest)
+        run: |
+          set -euxo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="$(grep -E '^version:' apps/mobile/pubspec.yaml | head -n1 | sed -E 's/^version:[[:space:]]*//' | cut -d+ -f1)"
+          code="$(grep -E '^version:' apps/mobile/pubspec.yaml | head -n1 | sed -E 's/^version:[[:space:]]*//' | cut -d+ -f2)"
+          apk="apps/mobile/build/app/outputs/flutter-apk/app-release.apk"
+          sha="$(sha256sum "$apk" | cut -d' ' -f1)"
+          stage="$(mktemp -d)"
+          cp "$apk" "$stage/ccferry.apk"
+          notes="$(git log -1 --pretty=%B)"
+          apk_url="https://github.com/weeklyforge/ccferry/releases/download/$tag/ccferry.apk"
+          node -e "process.stdout.write(JSON.stringify({version:'$version',versionCode:$code,sha256:'$sha',apk:'$apk_url',notes:process.argv[1].trimEnd()}))" "$notes" > "$stage/latest.json"
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --title "$version" --notes "$notes" --latest \
+            "$stage/ccferry.apk" "$stage/latest.json"
+        env:
+          GH_TOKEN: ${{ github.token }}
