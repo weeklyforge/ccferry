@@ -22,6 +22,29 @@ export interface ServerOptions {
   broker?: ApprovalBroker;
   vaultRoot?: string | null;
   token?: string;
+  // Cap on waiting for the next driver event during a send. A stalled
+  // resume (huge session, wedged CLI) used to hold the POST's SSE open
+  // forever: the phone's sender stayed "sending" and every later tap was
+  // silently swallowed. On idle, the stream gets an explicit error frame
+  // and ends, so clients surface the failure and reset.
+  sendMessageTimeoutMs?: number;
+}
+
+const SEND_IDLE = Symbol('send-idle');
+
+async function nextEventOrIdle<T>(
+  iterator: AsyncIterator<T>,
+  idleMs: number,
+): Promise<IteratorResult<T> | typeof SEND_IDLE> {
+  let timer: NodeJS.Timeout | undefined;
+  const idle = new Promise<typeof SEND_IDLE>((resolve) => {
+    timer = setTimeout(() => resolve(SEND_IDLE), idleMs);
+  });
+  try {
+    return await Promise.race([iterator.next(), idle]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): FastifyInstance {
@@ -105,13 +128,25 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
       return reply.code(409).send({ error: 'session_active', lastModifiedMs: session.lastModifiedMs });
     }
     startSse(reply.raw);
+    const idleMs = opts.sendMessageTimeoutMs ?? 90_000;
+    const events = driver.sendMessage({
+      sessionId: id,
+      projectPath: session.projectPath,
+      text: body.text,
+    });
     try {
-      for await (const event of driver.sendMessage({
-        sessionId: id,
-        projectPath: session.projectPath,
-        text: body.text,
-      })) {
-        reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+      for (;;) {
+        const next = await nextEventOrIdle(events, idleMs);
+        if (next === SEND_IDLE) {
+          req.log.error({ sessionId: id }, 'send message stalled with no driver events');
+          events.return(undefined).catch(() => undefined); // cancel the stalled query
+          reply.raw.write(
+            `data: ${JSON.stringify({ type: 'error', message: 'send timed out: the session produced no response' })}\n\n`,
+          );
+          break;
+        }
+        if (next.done) break;
+        reply.raw.write(`data: ${JSON.stringify(next.value)}\n\n`);
       }
     } catch (error) {
       req.log.error({ err: error, sessionId: id }, 'send message failed');

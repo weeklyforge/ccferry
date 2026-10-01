@@ -18,6 +18,12 @@ class ThrowingSendDriver extends FakeDriver {
   }
 }
 
+class SilentSendDriver extends FakeDriver {
+  async *sendMessage(): AsyncGenerator<never> {
+    await new Promise(() => undefined); // never yields, never returns
+  }
+}
+
 class OptsCapturingDriver extends FakeDriver {
   lastOpts: { fromStart: boolean; fromByte?: number } | undefined;
 
@@ -111,6 +117,18 @@ describe('api server', () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toContain('text/event-stream');
     expect(res.body).toContain('data: {"type":"error","message":"send boom"}');
+  });
+
+  it('POST messages aborts with an error frame when the driver stalls past the idle timeout', async () => {
+    const app = buildServer(new SilentSendDriver([], [session()]), { sendMessageTimeoutMs: 20 });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/messages',
+      payload: { text: 'hi' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain('"type":"error"');
+    expect(res.body).toContain('timed out');
   });
 
   it('POST messages returns 409 session_active for a recently modified session (red line guard)', async () => {
