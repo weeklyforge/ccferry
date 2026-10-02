@@ -7,6 +7,9 @@ export interface DaemonConfig {
   vaultPath?: string;
   toolWhitelist: string[];
   approvalTimeoutMs: number;
+  // Red-line window for remote continuation of a recently-written session;
+  // undefined = the server default (10 minutes), 0 disables the guard.
+  activeSessionWindowMs?: number;
 }
 
 export function loadConfig(filePath?: string): DaemonConfig {
@@ -30,5 +33,9 @@ export function loadConfig(filePath?: string): DaemonConfig {
       typeof source['approvalTimeoutMs'] === 'number' && source['approvalTimeoutMs'] > 0
         ? source['approvalTimeoutMs']
         : 60_000,
+    activeSessionWindowMs:
+      typeof source['activeSessionWindowMs'] === 'number' && source['activeSessionWindowMs'] >= 0
+        ? source['activeSessionWindowMs']
+        : undefined,
   };
 }

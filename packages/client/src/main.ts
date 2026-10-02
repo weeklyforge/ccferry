@@ -28,7 +28,7 @@ const app = buildServer(
     whitelist: config.toolWhitelist,
     scan: cachedScan(claudeDir, 5000),
   }),
-  { broker, vaultRoot: config.vaultPath ?? null, token, logger: true },
+  { broker, vaultRoot: config.vaultPath ?? null, token, logger: true, activeSessionWindowMs: config.activeSessionWindowMs },
 );
 
 if (existsSync(pwaDir)) {

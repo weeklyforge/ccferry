@@ -49,4 +49,15 @@ describe('loadConfig', () => {
     expect(config.vaultPath).toBe('D:/v');
     expect(config.approvalTimeoutMs).toBe(60000);
   });
+
+  it('loads activeSessionWindowMs, including 0 to disable the guard', async () => {
+    await fs.writeFile(configFile, JSON.stringify({ activeSessionWindowMs: 0 }));
+    expect(loadConfig(configFile).activeSessionWindowMs).toBe(0);
+
+    await fs.writeFile(configFile, JSON.stringify({ activeSessionWindowMs: 300000 }));
+    expect(loadConfig(configFile).activeSessionWindowMs).toBe(300000);
+
+    await fs.writeFile(configFile, JSON.stringify({}));
+    expect(loadConfig(configFile).activeSessionWindowMs).toBeUndefined();
+  });
 });
