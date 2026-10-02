@@ -129,6 +129,14 @@ Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" |
 
 Killing just the exe does NOT stop the daemon — the supervisor loop resurrects it within 5s (that is the feature).
 
+**Watchdog (optional, recommended)** — the supervisor loop covers exe crashes, but if the whole task tree dies together (external kill, job-object termination — seen 2026-10-01 and 2026-10-02), nothing restarts it. A second per-minute task closes that gap. Save `scripts/package/templates/win-watchdog.ps1` to `%USERPROFILE%\.ccferry\watchdog.ps1` and register:
+
+```powershell
+schtasks /create /f /tn ccferry-watchdog /sc minute /mo 1 /tr 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<user>\.ccferry\watchdog.ps1'
+```
+
+It starts `ccferry-daemon` whenever `ccferry-client.exe` is missing and logs the action to `~\.ccferry\logs\watchdog.log` (only when it acts).
+
 ### 5.2 Linux — systemd user unit (untested)
 
 `~/.config/systemd/user/ccferry.service`:

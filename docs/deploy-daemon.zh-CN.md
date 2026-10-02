@@ -128,6 +128,14 @@ Get-CimInstance Win32_Process -Filter "Name='cmd.exe'" |
 
 只杀 exe 不算停止——监督循环 5 秒内就会把它拉回来（这正是本设计的目的）。
 
+**看门狗（可选，建议装）**——监督循环只管 exe 崩溃；若整个任务树被一起终止（外部 kill / Job Object 终结，2026-10-01 与 2026-10-02 各发生一次），没人会拉起它。第二个每分钟任务补上这个缺口：把 `scripts/package/templates/win-watchdog.ps1` 存为 `%USERPROFILE%\.ccferry\watchdog.ps1`，注册：
+
+```powershell
+schtasks /create /f /tn ccferry-watchdog /sc minute /mo 1 /tr 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\Users\<user>\.ccferry\watchdog.ps1'
+```
+
+发现 `ccferry-client.exe` 不在就执行 `/run ccferry-daemon`，动作记录在 `~\.ccferry\logs\watchdog.log`（仅在实际拉起时写）。
+
 ### 5.2 Linux —— systemd 用户服务（未实测）
 
 `~/.config/systemd/user/ccferry.service`：
