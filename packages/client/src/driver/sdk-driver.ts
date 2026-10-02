@@ -132,6 +132,7 @@ export class SdkDriver implements SessionDriver {
         cwd: input.projectPath,
         canUseTool: this.canUseTool,
         pathToClaudeCodeExecutable: this.claudeExecutable,
+        permissionMode: input.mode === 'auto' ? 'auto' : undefined,
       },
     })) {
       const msg = message as SdkMessage & { session_id?: string };

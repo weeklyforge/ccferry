@@ -9,7 +9,7 @@ import { registerNewSessionRoute } from './new-session-route';
 import { registerVaultRoutes } from './vault-routes';
 import { startSse } from './sse';
 
-const ACTIVE_WINDOW_MS = 120_000;
+const ACTIVE_WINDOW_MS = 600_000;
 
 // The daemon binds to 127.0.0.1; also demand a loopback Host header so a
 // visited website cannot reach it through DNS rebinding (which would make
@@ -28,6 +28,11 @@ export interface ServerOptions {
   // silently swallowed. On idle, the stream gets an explicit error frame
   // and ends, so clients surface the failure and reset.
   sendMessageTimeoutMs?: number;
+  // The red line: a session the local TUI is (or was just) writing must not
+  // receive remote continuation. Both daemon deaths (2026-10-01 21:43,
+  // 2026-10-02 10:31) followed a remote resume of a TUI-live session, so
+  // the window is now absolute — force no longer bypasses it.
+  activeSessionWindowMs?: number;
 }
 
 const SEND_IDLE = Symbol('send-idle');
@@ -119,13 +124,21 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
 
   app.post('/api/sessions/:id/messages', async (req, reply) => {
     const { id } = req.params as { id: string };
-    const body = (req.body ?? {}) as { text?: string; force?: boolean };
+    const body = (req.body ?? {}) as { text?: string; force?: boolean; mode?: string };
     if (!body.text) return reply.code(400).send({ error: 'text required' });
     const { sessions } = await driver.list();
     const session = sessions.find((s) => s.sessionId === id);
     if (!session) return reply.code(404).send({ error: 'session not found' });
-    if (Date.now() - session.lastModifiedMs < ACTIVE_WINDOW_MS && !body.force) {
-      return reply.code(409).send({ error: 'session_active', lastModifiedMs: session.lastModifiedMs });
+    const windowMs = opts.activeSessionWindowMs ?? ACTIVE_WINDOW_MS;
+    const quietMs = Date.now() - session.lastModifiedMs;
+    if (quietMs < windowMs) {
+      // absolute — body.force is accepted but no longer bypasses the window
+      const retryInSec = Math.ceil((windowMs - quietMs) / 1000);
+      return reply.code(409).send({
+        error: 'session_active',
+        lastModifiedMs: session.lastModifiedMs,
+        message: `session is active on the PC; remote continuation is refused for another ~${retryInSec}s`,
+      });
     }
     startSse(reply.raw);
     const idleMs = opts.sendMessageTimeoutMs ?? 90_000;
@@ -133,6 +146,7 @@ export function buildServer(driver: SessionDriver, opts: ServerOptions = {}): Fa
       sessionId: id,
       projectPath: session.projectPath,
       text: body.text,
+      mode: body.mode === 'auto' ? 'auto' : undefined,
     });
     try {
       for (;;) {

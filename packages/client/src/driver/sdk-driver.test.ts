@@ -4,10 +4,12 @@ import { describe, expect, it, vi } from 'vitest';
 // the module mock below can close over it.
 const queryCalls: {
   prompt?: unknown;
-  options?: { pathToClaudeCodeExecutable?: string };
+  options?: { pathToClaudeCodeExecutable?: string; permissionMode?: string };
 }[] = vi.hoisted(() => []);
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
-  query: async function* (q: { options?: { pathToClaudeCodeExecutable?: string } }) {
+  query: async function* (q: {
+    options?: { pathToClaudeCodeExecutable?: string; permissionMode?: string };
+  }) {
     queryCalls.push(q);
     // Streaming input mode behaves like a live CLI: messages flow, and after
     // the result message the process stays alive waiting for more input. A
@@ -67,6 +69,22 @@ describe('SdkDriver.sendMessage', () => {
       events.push(event);
     }
     expect(events.at(-1)).toEqual({ type: 'result', subtype: 'success', text: 'done', sessionId: 'sid-1' });
+  });
+
+  it('requests auto permission mode only when the send asks for it', async () => {
+    const driver = new SdkDriver('/nonexistent', {
+      execPath: 'C:\\node\\node.exe',
+      exists: () => false,
+    });
+    for await (const _ of driver.sendMessage({ sessionId: null, projectPath: 'C:\\p', text: 'a' })) {
+      void _;
+    }
+    expect(queryCalls.at(-1)?.options?.permissionMode).toBeUndefined();
+
+    for await (const _ of driver.sendMessage({ sessionId: null, projectPath: 'C:\\p', text: 'b', mode: 'auto' })) {
+      void _;
+    }
+    expect(queryCalls.at(-1)?.options?.permissionMode).toBe('auto');
   });
 });
 

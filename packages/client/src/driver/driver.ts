@@ -4,6 +4,10 @@ export interface SendMessageInput {
   sessionId: string | null;
   projectPath: string;
   text: string;
+  // 'auto' lets the session's own permission mode decide tool approvals
+  // (phone-initiated unattended runs); undefined = the daemon's whitelist
+  // and approval-broker flow.
+  mode?: 'auto';
 }
 
 export interface SessionDriver {

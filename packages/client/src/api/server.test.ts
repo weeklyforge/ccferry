@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ParsedLine, SessionSummary } from '@ccferry/protocol';
 import { FakeDriver } from '../driver/fake-driver';
+import type { SendMessageInput } from '../driver/driver';
 import { buildServer } from './server';
 
 const NOW = Date.now();
@@ -24,6 +25,15 @@ class SilentSendDriver extends FakeDriver {
   }
 }
 
+class CapturingSendDriver extends FakeDriver {
+  lastInput: SendMessageInput | undefined;
+
+  override async *sendMessage(input: SendMessageInput): AsyncGenerator<never> {
+    this.lastInput = input;
+    yield* super.sendMessage(input) as AsyncGenerator<never>;
+  }
+}
+
 class OptsCapturingDriver extends FakeDriver {
   lastOpts: { fromStart: boolean; fromByte?: number } | undefined;
 
@@ -39,7 +49,8 @@ function session(overrides: Partial<SessionSummary> = {}): SessionSummary {
     projectPath: 'D:\\work\\proj A',
     file: 'D:\\fake\\11111111-aaaa-4bbb-8ccc-000000000001.jsonl',
     sizeBytes: 100,
-    lastModifiedMs: NOW - 10 * 60 * 1000,
+    // comfortably outside the default 10-minute active-session window
+    lastModifiedMs: NOW - 15 * 60 * 1000,
     firstUserText: 'hello',
     ...overrides,
   };
@@ -139,7 +150,9 @@ describe('api server', () => {
       payload: { text: 'hi' },
     });
     expect(res.statusCode).toBe(409);
-    expect(res.json()).toMatchObject({ error: 'session_active' });
+    const body = res.json();
+    expect(body.error).toBe('session_active');
+    expect(body.message).toContain('active on the PC');
   });
 
   it('POST messages resumes and streams DriverEvents when idle', async () => {
@@ -154,15 +167,50 @@ describe('api server', () => {
     expect(res.body).toContain('echo:hi');
   });
 
-  it('POST messages with force bypasses the active guard', async () => {
+  it('force no longer bypasses the active-session guard', async () => {
     const app = buildServer(new FakeDriver([], [session({ lastModifiedMs: NOW - 1000 })]));
     const res = await app.inject({
       method: 'POST',
       url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/messages',
       payload: { text: 'hi', force: true },
     });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toBe('session_active');
+  });
+
+  it('the active-session window is configurable', async () => {
+    const app = buildServer(new FakeDriver([], [session({ lastModifiedMs: NOW - 10 * 60 * 1000 })]), {
+      activeSessionWindowMs: 60_000,
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/messages',
+      payload: { text: 'hi' },
+    });
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain('echo:hi');
+  });
+
+  it('POST messages passes an auto permission mode through to the driver', async () => {
+    const driver = new CapturingSendDriver([], [session()]);
+    const app = buildServer(driver);
+    await app.inject({
+      method: 'POST',
+      url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/messages',
+      payload: { text: 'hi', mode: 'auto' },
+    });
+    expect(driver.lastInput?.mode).toBe('auto');
+  });
+
+  it('POST messages without a mode leaves the driver mode unset', async () => {
+    const driver = new CapturingSendDriver([], [session()]);
+    const app = buildServer(driver);
+    await app.inject({
+      method: 'POST',
+      url: '/api/sessions/11111111-aaaa-4bbb-8ccc-000000000001/messages',
+      payload: { text: 'hi' },
+    });
+    expect(driver.lastInput?.mode).toBeUndefined();
   });
 
   it('POST /api/messages starts a new session and streams DriverEvents', async () => {
