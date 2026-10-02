@@ -99,7 +99,7 @@ class _CcferryAppState extends State<CcferryApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navKey,
-      title: 'ccferry',
+      title: 'CC Ferry',
       routes: {'/sessions': (ctx) => _sessionsHome()},
       onGenerateRoute: (settings) {
         if (settings.name == '/session') {          final sessionId = settings.arguments as String;
