@@ -27,6 +27,7 @@ class _SessionPageState extends State<SessionPage> {
   final TextEditingController _input = TextEditingController();
   SessionSender? _sender;
   FollowHandle? _approvalsHandle;
+  bool _autoMode = false; // per-composer toggle; rides each send as mode auto
 
   // Follow-scroll state: "at the bottom" means within this many pixels of the
   // end. New rows arriving while the reader is away from the bottom count up
@@ -115,22 +116,7 @@ class _SessionPageState extends State<SessionPage> {
     final failedBefore = sender.errors.length;
     model.beginSend(text.trim()); // optimistic echo until the stream replays it
     setState(() {});
-    await sender.send(
-      text,
-      confirmForce: () async {
-        final ok = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            content: const Text('会话近期仍有写入（可能本地 TUI 正在跑）。强制续聊？'),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-              FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('强制续聊')),
-            ],
-          ),
-        );
-        return ok == true;
-      },
-    );
+    await sender.send(text, autoMode: _autoMode);
     if (sender.errors.length > failedBefore) {
       // the send failed — the session's own echo will never arrive
       model.cancelPendingSend();
@@ -269,6 +255,12 @@ class _SessionPageState extends State<SessionPage> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => setState(() => _autoMode = !_autoMode),
+                  isSelected: _autoMode,
+                  icon: const Icon(Icons.bolt),
+                  tooltip: '自动执行（工具免逐项审批）',
+                ),
                 FilledButton(onPressed: _send, child: const Text('发送')),
               ],
             ),

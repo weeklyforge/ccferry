@@ -201,5 +201,24 @@ void main() {
 
     model.close();
   });
+
+  testWidgets('composer has an auto-mode toggle that flips', (tester) async {
+    final source = FakeSource([FakeSource.userLine('u1', 'hi')]);
+    final model = SessionStreamModel(connect: source.connectLive);
+
+    await tester.pumpWidget(harness(model));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    final bolt = find.byIcon(Icons.bolt);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.bolt)).isSelected,
+        isFalse);
+    await tester.tap(bolt);
+    await tester.pump();
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.bolt)).isSelected,
+        isTrue);
+
+    model.close();
+  });
 }
 

@@ -7,7 +7,7 @@ import 'package:ccferry_mobile/net/api_client.dart';
 import 'package:ccferry_mobile/session/sender.dart';
 
 void main() {
-  test('send posts text and force=false, collects error events', () async {
+  test('send posts the text and collects error events', () async {
     final bodies = <Map<String, dynamic>>[];
     final client = ApiClient(
       client: MockClient((r) async {
@@ -18,52 +18,44 @@ void main() {
       token: () => 't',
     );
     final sender = SessionSender(client: client, sessionId: 's1');
-    await sender.send('hi', confirmForce: () async => false);
+    await sender.send('hi');
 
-    expect(bodies.single, {'text': 'hi', 'force': false});
+    expect(bodies.single, {'text': 'hi'});
     expect(sender.errors, ['nope']);
   });
 
-  test('409 session_active asks for confirmation then resends with force', () async {
+  test('autoMode rides the request as mode auto', () async {
     final bodies = <Map<String, dynamic>>[];
-    var asked = 0;
     final client = ApiClient(
       client: MockClient((r) async {
-        final body = jsonDecode((r).body) as Map<String, dynamic>;
-        bodies.add(body);
-        if (body['force'] == false) {
-          return http.Response(jsonEncode({'error': 'session_active'}), 409);
-        }
+        bodies.add(jsonDecode((r).body) as Map<String, dynamic>);
         return http.Response('data: {"type":"done"}\n\n', 200);
       }),
       base: () => Uri.parse('https://x'),
       token: () => 't',
     );
     final sender = SessionSender(client: client, sessionId: 's1');
-    await sender.send('hi', confirmForce: () async => ++asked > 0);
+    await sender.send('hi', autoMode: true);
 
-    expect(asked, 1);
-    expect(bodies, [
-      {'text': 'hi', 'force': false},
-      {'text': 'hi', 'force': true},
-    ]);
+    expect(bodies.single, {'text': 'hi', 'mode': 'auto'});
     expect(sender.errors, isEmpty);
   });
 
-  test('declined force confirmation sends nothing else', () async {
-    final bodies = <Map<String, dynamic>>[];
+  test('409 session_active surfaces a friendly hint and never retries', () async {
+    var posts = 0;
     final client = ApiClient(
       client: MockClient((r) async {
-        bodies.add(jsonDecode((r).body) as Map<String, dynamic>);
+        posts += 1;
         return http.Response(jsonEncode({'error': 'session_active'}), 409);
       }),
       base: () => Uri.parse('https://x'),
       token: () => 't',
     );
     final sender = SessionSender(client: client, sessionId: 's1');
-    await sender.send('hi', confirmForce: () async => false);
+    await sender.send('hi');
 
-    expect(bodies.length, 1); // only the original attempt
+    expect(posts, 1); // the guard is absolute — no force retry
+    expect(sender.errors, ['会话正在 PC 端使用，请稍后再试']);
   });
 
   test('other errors surface as messages', () async {
@@ -73,7 +65,7 @@ void main() {
       token: () => 't',
     );
     final sender = SessionSender(client: client, sessionId: 's1');
-    await sender.send('hi', confirmForce: () async => false);
+    await sender.send('hi');
     expect(sender.errors.single, contains('500'));
   });
 }
