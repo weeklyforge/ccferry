@@ -6,5 +6,5 @@
     "typecheck": "pnpm -r typecheck"
   },
   "packageManager": "pnpm@10.12.4",
-  "version": "0.2.3"
+  "version": "0.2.4"
 }
